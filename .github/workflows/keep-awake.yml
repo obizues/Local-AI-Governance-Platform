@@ -1,0 +1,11 @@
+name: Keep Awake
+on:
+  schedule:
+    - cron: '*/15 * * * *'
+jobs:
+  keep-awake:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Curl homepage
+        run: |
+          curl -sSf https://your-app-url.com || true
