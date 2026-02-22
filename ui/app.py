@@ -264,9 +264,10 @@ def generate_answer(query, retrieved_chunks):
     context = "\n".join(
         line for line in context.splitlines() if not line.strip().startswith("#")
     )
+    # Strict prompt: Only answer from context, otherwise say no SOP found
     prompt = (
-        "You are an expert assistant. Only use the information from the context that is directly relevant to the question. "
-        "If some context is unrelated, ignore it. Do not mention or add any notes, disclaimers, or statements about what is or isn't included or omitted. Do not mention onboarding or vacation policies unless the question is about those topics. Do not repeat or restate the steps in your answer. Just answer the question directly.\n"
+        "You are an expert assistant. Only use the information from the context below. "
+        "If the context does not contain deployment instructions or steps, respond: 'No deployment SOP found in internal documentation.'\n"
         f"Context:\n{context}\n\nQuestion: {query}\nAnswer:"
     )
     if GEN_MODEL_NAME == 'ollama':
@@ -324,10 +325,36 @@ if 'selected_model' not in st.session_state or st.session_state['selected_model'
     st.session_state['selected_model'] = selected_model
 
 def retrieve(query, top_k=3):
+    # DEBUG: Log type and dir of index to diagnose FAISS search error
+    log_path = os.path.join(os.path.dirname(__file__), '..', 'ollama_debug.log')
+    try:
+        with open(log_path, 'a', encoding='utf-8') as logf:
+            logf.write(f"[DEBUG] index type: {type(index)}\n")
+            logf.write(f"[DEBUG] index dir: {dir(index)}\n")
+    except Exception as e:
+        pass
     query_emb = embed_model.encode([query]).astype('float32')
+    if len(query_emb.shape) == 1:
+        query_emb = query_emb.reshape(1, -1)
     top_k = 5  # Retrieve more chunks for richer answers
     D, I = index.search(query_emb, top_k)
     results = metadata.iloc[I[0]]
+    # If the query is about deployment, always include the deploy_software_sop chunk
+    if 'deploy' in query.lower() or 'deployment' in query.lower():
+        # Find the deploy_software_sop.md chunk in the full metadata
+        sop_mask = metadata['file'].astype(str).str.contains('deploy_software_sop', case=False, na=False)
+        sop_chunk = metadata[sop_mask]
+        # If not already in results, append it
+        if not sop_chunk.empty:
+            # Avoid duplicates
+            if hasattr(results, 'file'):
+                in_results = results['file'].astype(str).str.contains('deploy_software_sop', case=False, na=False)
+                if not in_results.any():
+                    # Append SOP chunk to results
+                    results = pd.concat([results, sop_chunk], ignore_index=True)
+            else:
+                # If results is a Series (single row), convert to DataFrame
+                results = pd.concat([results.to_frame().T, sop_chunk], ignore_index=True)
     return results
 
 if 'history' not in st.session_state:
@@ -357,7 +384,9 @@ st.markdown('''
 .scrollable-chat-window {
     width: 100%;
     margin: 0;
-    height: 180px;
+    height: 220px;
+    min-height: 120px;
+    max-height: 32vh;
     overflow-y: scroll;
     padding: 0 2px 0 2px;
     background: #fafbfc;
@@ -408,6 +437,13 @@ st.markdown('''
     margin: 0;
     background: #fff;
     padding: 0;
+}
+@media (max-width: 900px) {
+    .scrollable-chat-window {
+        height: 120px;
+        min-height: 80px;
+        max-height: 18vh;
+    }
 }
 </style>
 ''', unsafe_allow_html=True)
@@ -553,62 +589,6 @@ with st.form(key='chat_input_form', clear_on_submit=True):
     # ...existing code...
 st.markdown('</div>', unsafe_allow_html=True)
 
-def retrieve(query, top_k=3):
-    query_emb = embed_model.encode([query]).astype('float32')
-    top_k = 5  # Retrieve more chunks for richer answers
-    D, I = index.search(query_emb, top_k)
-    results = metadata.iloc[I[0]]
-    return results
-
-def generate_answer(query, retrieved_chunks):
-    import time
-    response_time = None
-    unrelated_keywords = ["vacation", "paid vacation", "HR portal", "onboarding", "welcome", "paperwork"]
-    filtered_texts = []
-    for x in retrieved_chunks['text'].tolist():
-        if isinstance(x, str) and x.strip():
-            lowered = x.lower()
-            if not any(kw in lowered for kw in unrelated_keywords):
-                filtered_texts.append(x)
-    context = "\n".join(filtered_texts)
-    context = "\n".join(
-        line for line in context.splitlines() if not line.strip().startswith("#")
-    )
-    prompt = (
-        "You are an expert assistant. Only use the information from the context that is directly relevant to the question. "
-        "If some context is unrelated, ignore it. Do not mention or add any notes, disclaimers, or statements about what is or isn't included or omitted. Do not mention onboarding or vacation policies unless the question is about those topics. Do not repeat or restate the steps in your answer. Just answer the question directly.\n"
-        f"Context:\n{context}\n\nQuestion: {query}\nAnswer:"
-    )
-    if GEN_MODEL_NAME == 'ollama':
-        import subprocess
-        ollama_path = r"C:\\Users\\mro84\\AppData\\Local\\Programs\\Ollama\\ollama.exe"
-        try:
-            import logging
-            log_path = os.path.join(os.path.dirname(__file__), '..', 'ollama_debug.log')
-            with open(log_path, 'a', encoding='utf-8') as logf:
-                logf.write(f"[DEBUG] Calling Ollama subprocess. Prompt length: {len(prompt)}\n")
-            start = time.time()
-            result = subprocess.run([
-                ollama_path, "run", "llama2:7b-chat"
-            ], input=prompt, capture_output=True, text=True, timeout=300, encoding="utf-8", errors="replace")
-            response_time = time.time() - start
-            with open(log_path, 'a', encoding='utf-8') as logf:
-                logf.write(f"[DEBUG] Ollama subprocess finished. Return code: {result.returncode}\n")
-            response = result.stdout.strip()
-            if not response:
-                with open(log_path, 'a', encoding='utf-8') as logf:
-                    logf.write(f"[DEBUG] No output. Stderr: {result.stderr.strip()}\n")
-                response = f"[Ollama returned no output. Return code: {result.returncode}. Stderr: {result.stderr.strip()}]"
-        except Exception as e:
-            with open(log_path, 'a', encoding='utf-8') as logf:
-                logf.write(f"[DEBUG] Exception: {e}\n")
-            response = f"[Ollama error: {e}]"
-        return response, response_time
-    else:
-        start = time.time()
-        response = llm(prompt)[0]['generated_text']
-        response_time = time.time() - start
-        return response, response_time
 
 
 
