@@ -10,6 +10,7 @@ import time
 import faiss
 import pandas as pd
 from sentence_transformers import SentenceTransformer
+from transformers import pipeline
 
 import streamlit as st
 
@@ -186,12 +187,6 @@ else:
     # Fallback: create a dummy index if not found
     emb_dim = 384  # all-MiniLM-L6-v2 output dim
     index = faiss.IndexFlatL2(emb_dim)
-def retrieve(query, top_k=3):
-    query_emb = embed_model.encode([query]).astype('float32')
-    top_k = 5  # Retrieve more chunks for richer answers
-    D, I = index.search(query_emb, top_k)
-    results = metadata.iloc[I[0]]
-    return results
 
 def generate_answer(query, retrieved_chunks):
     # Echo mode for testing chat scroll
@@ -247,6 +242,14 @@ def generate_answer(query, retrieved_chunks):
         return response, response_time
 
 # --- Injected Modern Chat UI ---
+
+def retrieve(query, top_k=3):
+    query_emb = embed_model.encode([query]).astype('float32')
+    top_k = 5  # Retrieve more chunks for richer answers
+    D, I = index.search(query_emb, top_k)
+    results = metadata.iloc[I[0]]
+    return results
+
 if 'history' not in st.session_state:
     st.session_state['history'] = []
 
