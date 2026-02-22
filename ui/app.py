@@ -1,22 +1,108 @@
 
+# --- Define ECHO_MODE ---
+ECHO_MODE = False
+
+# --- Define model name variables ---
+GEN_MODEL_NAME = 'ollama'  # or your default model name
+GEN_MODEL_NAME_DISPLAY = 'Ollama'
+import os
+import time
+import faiss
+import pandas as pd
+from sentence_transformers import SentenceTransformer
+
 import streamlit as st
-# --- Echo mode toggle for testing chat scroll ---
 
+# Use fixed embedding model
+EMBED_MODEL_NAME = 'all-MiniLM-L6-v2'
+embed_model = SentenceTransformer(EMBED_MODEL_NAME)
 
+# Set up generative model (no timing)
+if GEN_MODEL_NAME == 'ollama':
+    llm = None  # Placeholder, handled in generate_answer
+    gen_model_display = GEN_MODEL_NAME_DISPLAY
+else:
+    llm = pipeline('text-generation', model=GEN_MODEL_NAME, device=-1, max_new_tokens=256)
+    gen_model_display = GEN_MODEL_NAME.upper()
+    # ...existing code...
 
 import os
-from sentence_transformers import SentenceTransformer
-import pandas as pd
-import faiss
-import csv
-import io
 import time
+import faiss
+import pandas as pd
+from sentence_transformers import SentenceTransformer
+
+import streamlit as st
+
+
+# --- Modern header banner ---
+
+import subprocess
+def get_app_version():
+        try:
+                return subprocess.check_output(["git", "describe", "--tags", "--abbrev=0"], encoding="utf-8").strip()
+        except Exception:
+                return "v1.0.0"
+APP_VERSION = get_app_version()
+header_html = f"""
+<style>
+.main-title-banner {{
+    background: linear-gradient(90deg, #2196f3 0%, #00bfae 100%);
+    color: #fff;
+    padding: 6px 6px 4px 6px;
+    border-radius: 8px;
+    margin-bottom: 2px;
+    text-align: center;
+    font-size: 1.25em;
+    font-weight: 600;
+}}
+.user-info-card {{
+    background: #f7f7f7;
+    color: #222;
+    border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+    padding: 4px 8px 4px 8px;
+    margin-bottom: 2px;
+    max-width: 500px;
+    margin-left: auto;
+    margin-right: auto;
+}}
+.user-info-links {{
+    margin-top: 4px;
+    font-size: 0.95em;
+}}
+</style>
+<div class="main-title-banner">
+    Internal Chat AI (POC)
+</div>
+<div class="user-info-card" style="text-align:center;">
+    <div style="font-size:1.15em;font-weight:600;color:#1976d2;text-align:center;">Chris Obermeier | SVP of Engineering</div>
+    <div style="margin-bottom:6px;text-align:center;">Enterprise & PE-Backed Platform Modernization | AI & Data-Driven Transformation</div>
+    <div class="user-info-links" style="text-align:center;margin-top:8px;">
+        <span>
+            <a href="https://www.linkedin.com/in/chris-obermeier" target="_blank" style="color:#1976d2;text-decoration:underline;">LinkedIn</a> |
+            <a href="https://github.com/obizues/Local-AI-Chatbot-POC" target="_blank" style="color:#1976d2;text-decoration:underline;">GitHub</a> |
+            <a href="mailto:chris.obermeier@gmail.com" style="color:#1976d2;text-decoration:underline;">Email</a>
+        </span>
+        <br>
+        <span>
+            ⭐ <a href="https://github.com/obizues/Local-AI-Chatbot-POC" target="_blank" style="color:#1976d2;text-decoration:underline;">Star on GitHub</a> |
+            📖 <a href="https://github.com/obizues/Local-AI-Chatbot-POC#readme" target="_blank" style="color:#1976d2;text-decoration:underline;">Read Documentation</a> |
+            🎓 <a href="https://github.com/obizues/Local-AI-Chatbot-POC/blob/main/ARCHITECTURE.md" target="_blank" style="color:#1976d2;text-decoration:underline;">View Architecture</a>
+        </span>
+        <br><b>App Version:</b> {APP_VERSION}
+    </div>
+</div>
+"""
+st.markdown(header_html, unsafe_allow_html=True)
 
 
 from numpy import dot
 from numpy.linalg import norm
 
 # Model options (must be defined before use)
+OLLAMA_MODEL = "llama2"  # Default model name (set to your preferred default)
+OLLAMA_MODEL_SELECTED = OLLAMA_MODEL  # Default selected model
 OLLAMA_MODEL = "llama2:7b-chat"
 OLLAMA_MODEL_MISTRAL = "mistral"
 GEN_MODEL_OPTIONS = [
@@ -26,114 +112,81 @@ GEN_MODEL_OPTIONS = [
     f'Ollama ({OLLAMA_MODEL})',
     f'Ollama ({OLLAMA_MODEL_MISTRAL})'
 ]
-
-def compute_max_similarity(answer, retrieved_texts, embed_model):
-    answer_emb = embed_model.encode([answer])[0]
-    chunk_embs = embed_model.encode([str(x) for x in retrieved_texts])
-    sims = [dot(answer_emb, c) / (norm(answer_emb) * norm(c)) for c in chunk_embs]
-    return max(sims) if sims else 0.0
-
 st.set_page_config(page_title="Internal Chat AI", layout="wide")
 
-# Reduce whitespace above the title
-st.markdown('''
-<style>
-.block-container {
-    padding-top: 1.5rem !important;
-}
-h1, .stMarkdown h1 {
-    margin-top: 0.2em !important;
-    }
-    </style>
-''', unsafe_allow_html=True)
-st.markdown('<h1 style="margin-bottom: 0.2em;">Internal Chat AI (POC)</h1>', unsafe_allow_html=True)
 
+EMBED_MODEL_NAME = 'all-MiniLM-L6-v2'
+embed_model = SentenceTransformer(EMBED_MODEL_NAME)
 
-
-
-
-# --- Echo mode toggle for testing chat scroll ---
-st.sidebar.header('Test/Echo Mode')
-ECHO_MODE = st.sidebar.checkbox('Enable test echo (bot repeats you)', key='echo_mode_checkbox')
-
-# Model selection UI (generative model only) - now on main page
-if ECHO_MODE:
-    st.info('Test Echo Mode is enabled. The bot will simply repeat your input for testing purposes. No models are used.')
-    GEN_MODEL_NAME_DISPLAY = f'Ollama ({OLLAMA_MODEL})'
-    GEN_MODEL_NAME = 'ollama'
-    OLLAMA_MODEL_SELECTED = OLLAMA_MODEL
+# Set up generative model (no timing)
+if GEN_MODEL_NAME == 'ollama':
+    llm = None  # Placeholder, handled in generate_answer
+    gen_model_display = GEN_MODEL_NAME_DISPLAY
 else:
-
-    GEN_MODEL_NAME_DISPLAY = st.selectbox('Active LLM', GEN_MODEL_OPTIONS, index=GEN_MODEL_OPTIONS.index(f'Ollama ({OLLAMA_MODEL})'))
-    if GEN_MODEL_NAME_DISPLAY.startswith('Ollama'):
-        GEN_MODEL_NAME = 'ollama'
-        # Set the correct Ollama model string for use in subprocess
-        if 'mistral' in GEN_MODEL_NAME_DISPLAY.lower():
-            OLLAMA_MODEL_SELECTED = OLLAMA_MODEL_MISTRAL
-        else:
-            OLLAMA_MODEL_SELECTED = OLLAMA_MODEL
-    else:
-        GEN_MODEL_NAME = GEN_MODEL_NAME_DISPLAY
-        OLLAMA_MODEL_SELECTED = OLLAMA_MODEL
-
-    # Model loading timers
-    load_times = {}
-    # ...existing code...
-
-    # Load FAISS index and metadata
-    data_dir = os.path.join(os.path.dirname(__file__), '../vector_db')
-    retrieval_start = time.time()
-    index = faiss.read_index(os.path.join(data_dir, 'faiss_index.bin'))
-    metadata = pd.read_csv(os.path.join(data_dir, 'metadata.csv'))
-    retrieval_time = time.time() - retrieval_start
-
-    # Model loading timers
-    load_times = {}
-
-    # Model loading timers
-    load_times = {}
-
-    # Load FAISS index and metadata
-    data_dir = os.path.join(os.path.dirname(__file__), '../vector_db')
-    retrieval_start = time.time()
-    index = faiss.read_index(os.path.join(data_dir, 'faiss_index.bin'))
-    metadata = pd.read_csv(os.path.join(data_dir, 'metadata.csv'))
-    retrieval_time = time.time() - retrieval_start
+    llm = pipeline('text-generation', model=GEN_MODEL_NAME, device=-1, max_new_tokens=256)
+    gen_model_display = GEN_MODEL_NAME.upper()
 
 
-    # Use fixed embedding model
-    EMBED_MODEL_NAME = 'all-MiniLM-L6-v2'
-    embed_model = SentenceTransformer(EMBED_MODEL_NAME)
+EMBED_MODEL_NAME = 'all-MiniLM-L6-v2'
+embed_model = SentenceTransformer(EMBED_MODEL_NAME)
 
-    # Set up generative model (no timing)
-    OLLAMA_MODEL = "llama2:7b-chat"
-    if GEN_MODEL_NAME == 'ollama':
-        llm = None  # Placeholder, handled in generate_answer
-        gen_model_display = f"Ollama ({OLLAMA_MODEL})"
-    else:
-        llm = pipeline('text-generation', model=GEN_MODEL_NAME, device=-1, max_new_tokens=256)
-        gen_model_display = GEN_MODEL_NAME.upper()
+# Set up generative model (no timing)
+if GEN_MODEL_NAME == 'ollama':
+    llm = None  # Placeholder, handled in generate_answer
+    gen_model_display = GEN_MODEL_NAME_DISPLAY
+else:
+    llm = pipeline('text-generation', model=GEN_MODEL_NAME, device=-1, max_new_tokens=256)
+    gen_model_display = GEN_MODEL_NAME.upper()
+
+EMBED_MODEL_NAME = 'all-MiniLM-L6-v2'
+EMBED_MODEL_NAME = 'all-MiniLM-L6-v2'
+embed_model = SentenceTransformer(EMBED_MODEL_NAME)
+
+# Set up generative model (no timing)
+if GEN_MODEL_NAME == 'ollama':
+    llm = None  # Placeholder, handled in generate_answer
+    gen_model_display = GEN_MODEL_NAME_DISPLAY
+else:
+    llm = pipeline('text-generation', model=GEN_MODEL_NAME, device=-1, max_new_tokens=256)
+    gen_model_display = GEN_MODEL_NAME.upper()
+
+embed_model = SentenceTransformer(EMBED_MODEL_NAME)
+
+# Set up generative model (no timing)
+if GEN_MODEL_NAME == 'ollama':
+    llm = None  # Placeholder, handled in generate_answer
+    gen_model_display = GEN_MODEL_NAME_DISPLAY
+else:
+    llm = pipeline('text-generation', model=GEN_MODEL_NAME, device=-1, max_new_tokens=256)
+    gen_model_display = GEN_MODEL_NAME.upper()
 
 
 
 
-
-    # Show only generative model
-    st.write(f"**Generative Model:** {gen_model_display}")
-    # Use fixed embedding model
-    EMBED_MODEL_NAME = 'all-MiniLM-L6-v2'
-    embed_model = SentenceTransformer(EMBED_MODEL_NAME)
-
-    # Set up generative model (no timing)
-    if GEN_MODEL_NAME == 'ollama':
-        llm = None  # Placeholder, handled in generate_answer
-        gen_model_display = GEN_MODEL_NAME_DISPLAY
-    else:
-        llm = pipeline('text-generation', model=GEN_MODEL_NAME, device=-1, max_new_tokens=256)
-        gen_model_display = GEN_MODEL_NAME.upper()
-    # ...existing code...
 
 # --- Move retrieve and generate_answer above chat UI ---
+# --- Load FAISS index and metadata ---
+import numpy as np
+import os
+index_path = os.path.join(os.path.dirname(__file__), '..', 'vector_db', 'document_chunks.index')
+metadata_path = os.path.join(os.path.dirname(__file__), '..', 'vector_db', 'metadata.csv')
+chunks_path = os.path.join(os.path.dirname(__file__), '..', 'ingestion', 'document_chunks.csv')
+
+# Load metadata
+if os.path.exists(metadata_path):
+    metadata = pd.read_csv(metadata_path)
+elif os.path.exists(chunks_path):
+    metadata = pd.read_csv(chunks_path)
+else:
+    metadata = pd.DataFrame()
+
+# Load or create FAISS index
+if os.path.exists(index_path):
+    index = faiss.read_index(index_path)
+else:
+    # Fallback: create a dummy index if not found
+    emb_dim = 384  # all-MiniLM-L6-v2 output dim
+    index = faiss.IndexFlatL2(emb_dim)
 def retrieve(query, top_k=3):
     query_emb = embed_model.encode([query]).astype('float32')
     top_k = 5  # Retrieve more chunks for richer answers
@@ -221,8 +274,8 @@ st.markdown('''
 <style>
 .scrollable-chat-window {
     max-width: 700px;
-    margin: 0 auto 4px auto;
-    height: 300px;
+    margin: 0 auto 2px auto;
+    height: 180px;
     overflow-y: scroll;
     padding: 0 2px 0 2px;
     background: #fafbfc;
@@ -270,9 +323,9 @@ st.markdown('''
 }
 .input-bar {
     max-width: 700px;
-    margin: 0 auto;
+    margin: 0 auto 0 auto;
     background: #fff;
-    padding: 2px 0 0 0;
+    padding: 0px 0 0 0;
 }
 </style>
 ''', unsafe_allow_html=True)
@@ -486,60 +539,32 @@ if not ECHO_MODE:
     else:
         MODEL_TYPE = f'{GEN_MODEL_NAME} (generative)'
 
-    # Section to view demo results log
-    st.sidebar.header('Demo Results Log')
-    if st.sidebar.button('Refresh Log'):
-        st.rerun()
-    log_path = os.path.join(os.path.dirname(__file__), '..', 'demo_results.csv')
-    expected_columns = ['question', 'answer', 'generative_model', 'embedding_model', 'elapsed_time', 'similarity', 'user_rating', 'notes']
-    import csv
-    import pandas as pd
-    def rewrite_csv_with_header(path, header):
-        with open(path, 'w', newline='', encoding='utf-8') as f:
-            writer = csv.writer(f, quoting=csv.QUOTE_ALL)
-            writer.writerow(header)
 
+    # --- Custom Sidebar Layout ---
+    # Sidebar info cards
+    st.sidebar.markdown(f"""
+    <div style='background:#eaf6ff;padding:10px 12px;border-radius:8px;margin-bottom:8px;font-size:1.1em;'>
+    <span style='font-size:1.2em;'>🗂️ <b>App version:</b></span><br>
+    <span style='font-size:1.05em;'>{APP_VERSION} - Debate Save Hotfix</span>
+    </div>
+    """, unsafe_allow_html=True)
 
-# --- Collapsible Demo Results Log ---
-with st.sidebar.expander('Demo Results Log', expanded=False):
-    if st.button('Refresh Log', key='refresh_demo_log'):
-        st.rerun()
-    log_path = os.path.join(os.path.dirname(__file__), '..', 'demo_results.csv')
-    expected_columns = ['question', 'answer', 'generative_model', 'embedding_model', 'elapsed_time', 'similarity', 'user_rating', 'notes']
-    import csv
-    import pandas as pd
-    def rewrite_csv_with_header(path, header):
-        with open(path, 'w', newline='', encoding='utf-8') as f:
-            writer = csv.writer(f, quoting=csv.QUOTE_ALL)
-            writer.writerow(header)
+    st.sidebar.markdown("""
+    <div style='background:#f5faff;padding:10px 12px;border-radius:8px;margin-bottom:8px;'>
+    <span style='font-size:1.15em;font-weight:600;'>⚪ <b>3-Agent Debate System</b></span><br>
+    <span style='font-size:1em;'>
+    🗂️ Planner | 📉 Market Analyst | 🛡️ Risk Officer<br>
+    🧠 Claude 3.5 Powered<br>⚡ Live Execution Tracking
+    </span>
+    </div>
+    """, unsafe_allow_html=True)
 
-    # ...existing code...
-    if os.path.isfile(log_path):
-        try:
-            log_df = pd.read_csv(log_path, quoting=csv.QUOTE_ALL, quotechar='"', engine='python')
-            # If columns don't match, rewrite file with new header
-            if list(log_df.columns) != expected_columns:
-                rewrite_csv_with_header(log_path, expected_columns)
-                st.sidebar.warning('Log file format changed. The log was reset to match the new format.')
-            else:
-                st.sidebar.dataframe(log_df)
-        except Exception as e:
-            # If error, rewrite file with new header and show message
-            rewrite_csv_with_header(log_path, expected_columns)
-            st.sidebar.error(f'Log file was malformed and has been reset. Error: {e}')
-    else:
-        st.sidebar.info('No demo results logged yet.')
-
-
-# --- Collapsible Improvements Tracker (Retrieval/Indexing/LLM/Settings only) ---
-with st.sidebar.expander('Retrieval & Indexing Improvements', expanded=False):
-    st.markdown('**Improvements to Embedding, Ingestion, LLM, Query, and Retrieval Accuracy/Settings:**')
-    improvements = [
-        "Updated retrieval filter to include vacation policy content for PTO/vacation questions.",
-        "Verified both LLMs (llama2:7b, mistral) now use correct policy for PTO queries.",
-        "Demo results log now auto-updates after each query for better evaluation.",
-        "Similarity between answer and retrieved context is now logged for each query.",
-        # Add more retrieval/indexing/accuracy/LLM/query/embedding/ingestion improvements here as you make them
-    ]
-    for i, item in enumerate(improvements, 1):
-        st.markdown(f"**{i}.** {item}")
+    # Collapsible sidebar sections (default collapsed)
+    with st.sidebar.expander("ℹ️ About This Project", expanded=False):
+        st.markdown("""<span style='font-size:1em;'>Project overview and goals.</span>""", unsafe_allow_html=True)
+    with st.sidebar.expander("📁 Project Documentation", expanded=False):
+        st.markdown("""<span style='font-size:1em;'>Links to docs and guides.</span>""", unsafe_allow_html=True)
+    with st.sidebar.expander("🛠️ Tech Stack", expanded=False):
+        st.markdown("""<span style='font-size:1em;'>Python, Streamlit, FAISS, etc.</span>""", unsafe_allow_html=True)
+    with st.sidebar.expander("📝 System Design Notes", expanded=False):
+        st.markdown("""<span style='font-size:1em;'>Architecture and design details.</span>""", unsafe_allow_html=True)
