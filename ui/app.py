@@ -77,8 +77,8 @@ if (stApp) { stApp.style.paddingTop = '0px'; }
 st.markdown(banner_html, unsafe_allow_html=True)
 
 # --- Sidebar Documentation Update ---
-sidebar_about_md = '''
-## About This Project
+with st.sidebar.expander("ℹ️ About This Project", expanded=False):
+    st.markdown("""
 Portfolio Project
 - Secure, local AI chatbot for enterprise document Q&A
 - Strict role-based access control (RBAC) for sensitive data
@@ -97,8 +97,7 @@ Technology executives, engineering leaders, HR professionals, AI/ML practitioner
 - Unified, modern chat UI with persistent role/model display
 - Clean architecture, modular code, and documentation
 - Technical leadership and system design for enterprise AI
-'''
-st.sidebar.markdown(sidebar_about_md)
+""")
 ## (Sidebar markdown removed as requested)
 
 
