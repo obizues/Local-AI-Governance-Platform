@@ -1,23 +1,6 @@
 
 ## 🖼️ System Diagram
 
-## About This Project
-
-Portfolio Project
-
-This is a demonstration of a secure, local AI chatbot architecture designed for:
-
-- Role-based access control (RBAC) for sensitive data
-- Real-time document Q&A and semantic search
-- Unified, modern chat UI with persistent role and model display
-- Production-grade Python/Streamlit stack
-- Modular, extensible codebase and reproducible environments
-- System design thinking and technical leadership
-
-**Target Audience:**
-Technology executives, engineering leaders, HR professionals, AI/ML practitioners, and technical decision-makers interested in secure document Q&A, RBAC enforcement, and advanced LLM-driven systems for enterprise use cases.
-
-
 > **Version:** v0.9.0 — February 22, 2026
 - **Version:** v0.10.0 — February 23, 2026
 
