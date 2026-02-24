@@ -76,51 +76,22 @@ if (stApp) { stApp.style.paddingTop = '0px'; }
 # Banner HTML (already defined as banner_html)
 st.markdown(banner_html, unsafe_allow_html=True)
 
-# --- Sidebar Documentation Update ---
-with st.sidebar.expander("ℹ️ About This Project", expanded=False):
-    st.markdown("""
-Portfolio Project
-- Secure, local AI chatbot for enterprise document Q&A
-- Strict role-based access control (RBAC) for sensitive data
-- Real-time semantic search and retrieval
-- Unified, modern chat UI with persistent role/model display
-- Modular, extensible Python/Streamlit codebase
-- Production-grade deployment and reproducible environments
-- Robust feedback logging and evaluation
-
-**Target Audience:**
-Technology executives, engineering leaders, HR professionals, AI/ML practitioners, and technical decision-makers interested in secure document Q&A, RBAC enforcement, and advanced LLM-driven systems for enterprise use cases.
-
-**What This Demonstrates:**
-- Deep LLM integration (Ollama, HuggingFace Transformers)
-- Multi-role RBAC enforcement and salary logic
-- Unified, modern chat UI with persistent role/model display
-- Clean architecture, modular code, and documentation
-- Technical leadership and system design for enterprise AI
-""")
-## (Sidebar markdown removed as requested)
-
-
-
-
-
 # Personal/professional info multi-line banner
 user_info_banner = """
 <style>
 .user-info-banner {
     width: 100vw;
-    background: #e3f2fd;
+    background: #f5f5f5;
     color: #1976d2;
     font-family: 'Segoe UI', 'Arial', sans-serif;
     font-size: 1.01em;
     font-weight: 500;
     text-align: center;
     margin: 0;
-    margin-top: 3.2em;
+    margin-top: 1.2em;
     margin-left: calc(-50vw + 50%);
     padding: 0.3em 0 0.3em 0;
     box-sizing: border-box;
-    border-bottom: 1px solid #b3e5fc;
 }
 .user-info-banner .name-title {
     font-size: 1.08em;
@@ -130,7 +101,7 @@ user_info_banner = """
 }
 .user-info-banner .subtitle {
     font-size: 0.98em;
-    color: #226;
+    color: #222;
     margin-bottom: 0.2em;
 }
 .user-info-banner .links, .user-info-banner .project-links {
@@ -154,17 +125,19 @@ user_info_banner = """
 }
 </style>
 <div class="user-info-banner">
-    <div class="name-title">Chris Obermeier | SVP of Engineering</div>
-    <div class="subtitle">Enterprise &amp; PE-Backed Platform Modernization | AI &amp; Data-Driven Transformation</div>
-    <div class="links">
-        <a href="https://www.linkedin.com/in/chrisobermeier/" target="_blank">LinkedIn</a> |
-        <a href="https://github.com/obizues" target="_blank">GitHub</a> |
-        <a href="mailto:chris.obermeier@gmail.com" target="_blank">Email</a>
-    </div>
-    <div class="project-links">
-        <span style="margin-right:4px;">&#11088;</span><a href="https://github.com/obizues/Local-AI-Chatbot-POC" target="_blank">Star on GitHub</a> |
-        <span style="margin-right:4px;">&#128214;</span><a href="https://github.com/obizues/Local-AI-Chatbot-POC/blob/main/README.md" target="_blank">Read Documentation</a> |
-        <span style="margin-right:4px;">&#127891;</span><a href="https://github.com/obizues/Local-AI-Chatbot-POC/blob/main/ARCHITECTURE.md" target="_blank">View Architecture</a>
+    <div style="background:#f5f6fa;border-radius:8px;padding:8px 14px 6px 14px;margin-bottom:6px;">
+        <div class="name-title" style="font-size:0.95em; font-weight:400; margin-bottom:0.08em;"><b>Chris Obermeier</b> | SVP of Engineering</div>
+        <div class="subtitle" style="background:transparent;border-radius:0;padding:2px 8px;font-size:0.83em;text-align:center;margin-bottom:0.08em;color:#64b5f6;font-weight:400;">Enterprise &amp; PE-Backed Platform Modernization | AI &amp; Data-Driven Transformation</div>
+        <div class="links" style="font-size:0.92em; font-weight:400; margin-bottom:0em;">
+            <a href="https://www.linkedin.com/in/chrisobermeier/" target="_blank">LinkedIn</a> |
+            <a href="https://github.com/obizues" target="_blank">GitHub</a> |
+            <a href="mailto:chris.obermeier@gmail.com" target="_blank">Email</a>
+        </div>
+        <div class="project-links" style="font-size:0.92em; font-weight:400; margin-top:0em;">
+            <span style="margin-right:4px;">&#11088;</span><a href="https://github.com/obizues/Local-AI-Chatbot-POC" target="_blank">Star on GitHub</a> |
+            <span style="margin-right:4px;">&#128214;</span><a href="https://github.com/obizues/Local-AI-Chatbot-POC/blob/main/README.md" target="_blank">Read Documentation</a> |
+            <span style="margin-right:4px;">&#127891;</span><a href="https://github.com/obizues/Local-AI-Chatbot-POC/blob/main/ARCHITECTURE.md" target="_blank">View Architecture</a>
+        </div>
     </div>
 </div>
 """
@@ -680,17 +653,10 @@ with st.container():
         .dropdown-col-align { min-width: 0; }
     }
     </style>
-    <div class="dropdown-row-align">
-        <div class="dropdown-col-align" id="llm-col">
-            <span class="dropdown-label-align">LLM Model:</span>
-        </div>
-        <div class="dropdown-col-align" id="role-col">
-            <span class="dropdown-label-align">Role:</span>
-        </div>
-    </div>
     """, unsafe_allow_html=True)
     col1, col2 = st.columns([1,1], gap="large")
     with col1:
+        st.markdown('<span class="dropdown-label-align">LLM Model:</span>', unsafe_allow_html=True)
         selected_model = st.selectbox(
             "LLM Model",
             GEN_MODEL_OPTIONS,
@@ -699,6 +665,7 @@ with st.container():
             label_visibility="collapsed"
         )
     with col2:
+        st.markdown('<span class="dropdown-label-align">Role:</span>', unsafe_allow_html=True)
         current_role = st.session_state.get('user_role', ROLES[0])
         new_role = st.selectbox(
             "Role",
@@ -1215,9 +1182,10 @@ if not ECHO_MODE:
 
     # Collapsible sidebar sections (default collapsed)
     st.sidebar.markdown(f"""
-<div class='sidebar-card' style='font-size:0.97em;padding:8px 12px 6px 12px;'>
-    <span style='font-size:1.05em;'>&#128241;</span> <b style='font-size:1em;'>App version:</b><br>
-    <span style='font-size:0.95em;'>{APP_VERSION} - RBAC, Role-Preserved Chat, and UI Enhancements</span>
+<div style='background:#eaf6ff;border:1.5px solid #b3e5fc;padding:10px 12px 8px 12px;margin-bottom:12px;text-align:center;border-radius:8px;'>
+    <span style='font-size:1.3em;'>📱</span>
+    <span style='font-size:1.08em;font-weight:600;color:#1976d2;'>App version:</span><br>
+    <span style='font-size:1.05em;color:#222;'>v0.11.0 - RBAC, Role-Preserved Chat, and UI Enhancements</span>
 </div>
 <div class='sidebar-card' style='background:#eaf6ff;font-size:0.93em;margin-bottom:16px;border:1.5px solid #b3e5fc;padding:8px 8px 6px 8px;'>
     <div style='font-weight:700;font-size:1em;line-height:1.2;margin-bottom:2px;text-align:center;'>
@@ -1252,34 +1220,39 @@ if not ECHO_MODE:
     # Restore About This Project expander at the top
     with st.sidebar.expander("ℹ️ About This Project", expanded=False):
         st.markdown("""
-<div style='font-size:1.15em;font-weight:700;margin-bottom:6px;'>Portfolio Project</div>
-<div style='margin-bottom:10px;'>
-    This is a demonstration of a <b>Chatbot</b> for private, local document Q&amp;A and semantic search, featuring:
-</div>
-<ul style='margin-top: 6px; margin-bottom: 0; padding-left: 18px;'>
-    <li>Conversational Q&amp;A over your internal documents</li>
-    <li>Natural language chat interface with context retention</li>
-    <li>Historical learning and context-aware chat memory</li>
-    <li>Private, local LLM (Ollama or HuggingFace) with no cloud dependency</li>
-    <li>Semantic search over internal documents using FAISS and embeddings</li>
-    <li>Modern, real-time UI with Streamlit</li>
-    <li>Production-grade, modular Python codebase</li>
-    </ul>
-    """, unsafe_allow_html=True)
+        Portfolio Project
+        - Secure, local AI chatbot for enterprise document Q&A
+        - Strict role-based access control (RBAC) for sensitive data
+        - Real-time semantic search and retrieval
+        - Unified, modern chat UI with persistent role/model display
+        - Modular, extensible Python/Streamlit codebase
+        - Production-grade deployment and reproducible environments
+        - Robust feedback logging and evaluation
 
+        **Target Audience:**
+        Technology executives, engineering leaders, HR professionals, AI/ML practitioners, and technical decision-makers interested in secure document Q&A, RBAC enforcement, and advanced LLM-driven systems for enterprise use cases.
+
+        **What This Demonstrates:**
+        - Deep LLM integration (Ollama, HuggingFace Transformers)
+        - Multi-role RBAC enforcement and salary logic
+        - Unified, modern chat UI with persistent role/model display
+        - Clean architecture, modular code, and documentation
+        - Technical leadership and system design for enterprise AI
+""", unsafe_allow_html=True)
+        
     with st.sidebar.expander("📁 Project Documentation", expanded=False):
         st.markdown("""
 <div style='font-size:1.12em;font-weight:700;margin-bottom:6px;'>Project Documentation</div>
 <div style='margin-bottom:8px;'>
     <span style='font-size:1em;'>
-        <b>GitHub Repository</b> <a href='https://github.com/obizues/Local-AI-Chatbot-POC' target='_blank'>github.com/obizues/Local-AI-Chatbot-POC</a>
+        <b>GitHub Repository</b> 🔗 <a href='https://github.com/obizues/Local-AI-Chatbot-POC' target='_blank'>github.com/obizues/Local-AI-Chatbot-POC</a>
     </span>
 </div>
 <div style='margin-bottom:8px;'><b>Documentation</b></div>
 <ul style='margin-bottom:0; padding-left: 18px;'>
-    <li><a href='https://github.com/obizues/Local-AI-Chatbot-POC/blob/main/README.md' target='_blank'>README.md</a> - Project overview, quick start, features</li>
-    <li><a href='https://github.com/obizues/Local-AI-Chatbot-POC/blob/main/ARCHITECTURE.md' target='_blank'>ARCHITECTURE.md</a> - Deep technical documentation</li>
-    <li>System Diagrams - 5 Mermaid diagrams</li>
+    <li>📖 <a href='https://github.com/obizues/Local-AI-Chatbot-POC/blob/main/README.md' target='_blank'>README.md</a> - Project overview, quick start, features</li>
+    <li>🏗️ <a href='https://github.com/obizues/Local-AI-Chatbot-POC/blob/main/ARCHITECTURE.md' target='_blank'>ARCHITECTURE.md</a> - Deep technical documentation</li>
+    <li>📊 System Diagrams - 5 Mermaid diagrams</li>
 </ul>
 <div style='margin-top:10px; margin-bottom:4px;'><b>Key Sections:</b></div>
 <ul style='margin-bottom:0; padding-left: 18px;'>
