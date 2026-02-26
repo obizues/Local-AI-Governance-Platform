@@ -10,13 +10,39 @@ import numpy as np
 doc_chunks_path = os.path.join(os.path.dirname(__file__), 'document_chunks.csv')
 df = pd.read_csv(doc_chunks_path)
 
+# Patch department/sensitivity for onboarding files
+onboarding_files = [
+    ('hr_onboarding.md', 'HR', 'internal'),
+    ('technology_onboarding.md', 'Technology', 'confidential')
+]
+for fname, dept, sens in onboarding_files:
+	idx = df['file'].astype(str).str.lower().str.contains(fname)
+	if idx.any():
+		df.loc[idx, 'department'] = dept
+		df.loc[idx, 'sensitivity'] = sens
+		# Optionally set version
+		df.loc[idx, 'version'] = 1.0
+
 payroll_idx = df['file'].astype(str).str.contains('payroll_confidential.txt', case=False, na=False)
 if payroll_idx.any():
 	payroll_row = df[payroll_idx].iloc[0]
 	payroll_text = payroll_row['text']
-	# Extract each employee line
+	# If the chunked text is missing salary lines, read the file directly
+	if not isinstance(payroll_text, str) or 'Name:' not in payroll_text:
+		payroll_file_path = os.path.join(os.path.dirname(__file__), 'payroll_confidential.txt')
+		if os.path.exists(payroll_file_path):
+			with open(payroll_file_path, 'r', encoding='utf-8') as f:
+				payroll_text = f.read()
+	# Robustly split salary block into one row per employee
 	import re
-	employee_lines = re.findall(r'Name:.*?\$[\d,]+', payroll_text)
+	# Split on 'Name:' and reconstruct each line
+	split_lines = re.split(r'(Name:)', payroll_text)
+	employee_lines = []
+	for i in range(1, len(split_lines), 2):
+		line = split_lines[i] + split_lines[i+1] if (i+1) < len(split_lines) else split_lines[i]
+		# Only keep lines that look like salary records
+		if re.search(r'\$[\d,]+', line):
+			employee_lines.append(line.strip())
 	# Create a new DataFrame for each employee
 	payroll_rows = []
 	for line in employee_lines:
@@ -26,6 +52,9 @@ if payroll_idx.any():
 	# Remove the original payroll row and add the new ones
 	df = df[~payroll_idx]
 	df = pd.concat([df, pd.DataFrame(payroll_rows)], ignore_index=True)
+	payroll_debug = df[df['file'].astype(str).str.contains('payroll_confidential.txt', case=False, na=False)][['file','text']]
+	print('DEBUG: payroll_confidential.txt rows after split:')
+	print(payroll_debug.to_string(index=False))
 
 # Load embedding model
 model = SentenceTransformer('all-MiniLM-L6-v2')

@@ -44,7 +44,7 @@ Technology executives, engineering leaders, HR professionals, AI/ML practitioner
 - Python 3.10+
 - (Optional) Ollama installed for local LLM support
 
-> **Version:** v0.11.0 — February 23, 2026
+> **Version:** v1.0.0 — February 26, 2026
 
 ### Setup
 1. Clone the repo:
@@ -67,29 +67,24 @@ Technology executives, engineering leaders, HR professionals, AI/ML practitioner
    (The new modern chat UI is integrated directly in ui/app.py. No need to use basic_chat.py. The `my_chat_component` folder has been removed as of v0.6.0.)
 
 
-## 🚀 Features (v0.9.0)
-- Strict RBAC for salary and sensitive data (HR: all, CTO: Technology only, David Kim: self only)
-- All salary responses are formatted as HTML tables
-- CTO/HR queries for specific roles (e.g., CTO salary) return only that individual's salary
-- Modern, unified Streamlit chat UI with colored header, sidebar, and persistent model display
-- Sidebar: About, Project Documentation, Tech Stack, System Design Notes, App Version
-- Conversational Q&A over your internal documents (PDF, DOCX, TXT)
-- Semantic search and retrieval with FAISS and SentenceTransformers
-- LLM support: Ollama (local) and HuggingFace Transformers (cloud/local)
-- Feedback logging, semantic similarity, and response time metrics
-- CSV logging of all interactions for evaluation
+## 🚀 Features (v0.11.0)
+- **Enterprise-Grade RBAC:** Strict, typo-tolerant role-based access control for all salary and sensitive queries. HR sees all, CTO sees only Technology, David Kim (Engineer) sees only his own salary. All denials and fallbacks use a unified, branded HTML message.
+- **Modern, Unified Chat UI:** Fully integrated Streamlit chat interface with persistent role/model display, right-aligned chat bubbles, and mobile-friendly design. Sidebar includes About, Docs, Tech Stack, System Design, and App Version.
+- **Role-Preserved Chat History:** Every message stores and displays the user's role at the time of sending, even if the role changes later.
+- **Advanced Semantic Search:** Real-time retrieval over internal documents (PDF, DOCX, TXT) using FAISS and SentenceTransformers. Supports both local (Ollama) and HuggingFace LLMs.
+- **Production-Ready Logging:** Robust audit logging for all unauthorized access attempts, CSV logging of all interactions, semantic similarity and response time metrics, and feedback voting for continuous improvement.
+- **Modular, Extensible Codebase:** Clean, well-documented Python/Streamlit architecture, ready for enterprise extension and deployment. Reproducible environments and secure secrets/configuration management.
+- **Technical Leadership:** Demonstrates advanced system design, RBAC enforcement, and LLM integration for secure enterprise AI. Inspired by best practices from agentic-mortgage-research.
+- **Brag-worthy:** All RBAC, fallback, and audit logic is fully tested (pytest), typo-tolerant, and robust to edge cases. Modern UI/UX, role-preserved chat, and seamless LLM/model switching.
 - Modular, extensible Python codebase
 - Devcontainer and GitHub Actions for reproducible development
 - Improvements tracker in sidebar
 
-## 📦 Project Structure (as of v0.8.0)
-- `ui/app.py` — Main Streamlit app (contains the new chat UI)
+
+## 📦 Project Structure (as of v0.11.0)
+- `ui/app.py` — Main Streamlit app (modern chat UI, RBAC, audit logic)
 - `llm_backend/` — LLM and RAG pipeline code
 - `ingestion/` — Data ingestion and chunking scripts
-## 🚀 Features (v0.11.0)
-- Strict RBAC for salary and sensitive data (HR: all, CTO: Technology only, David Kim: self only)
-- All salary responses are formatted as HTML tables
-- CTO/HR queries for specific roles (e.g., CTO salary) return only that individual's salary
 - `mock_data/` — Example documents
 - `.devcontainer/` — VS Code devcontainer config
 - `.github/workflows/` — GitHub Actions workflows
@@ -100,15 +95,19 @@ Technology executives, engineering leaders, HR professionals, AI/ML practitioner
 
 *Note: The `my_chat_component` folder has been removed as of v0.6.0. All chat UI is now in `ui/app.py` as of v0.8.0.*
 
-## 🔐 Security Notes
+
+## 🔒 Security Notes
 - No API keys are committed
 - Use `.env` or `.streamlit/secrets.toml` for secrets
 - All secrets files are gitignored
+- All RBAC, fallback, and audit logic is fully tested and typo-tolerant
+
 
 ## 📚 Further Reading
 - [ARCHITECTURE.md](ARCHITECTURE.md)
 - [CHANGELOG.md](CHANGELOG.md)
 - [System Design Notes](ARCHITECTURE.md#system-components)
+- [ui/app.py](ui/app.py) for modern chat UI and RBAC logic
 
 ## 📝 License
 MIT License — see [LICENSE]

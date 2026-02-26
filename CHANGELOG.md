@@ -1,10 +1,16 @@
 
 
+
 # [0.11.0] - 2026-02-23
 ### Changed
-- Strict RBAC for salary and sensitive data (HR: all, CTO: Technology only, David Kim: self only)
-- All salary responses are formatted as HTML tables
-- CTO/HR queries for specific roles (e.g., CTO salary) return only that individual's salary
+- Enterprise-grade, typo-tolerant RBAC for all salary and sensitive queries (HR: all, CTO: Technology only, David Kim: self only)
+- All denials and fallbacks use a unified, branded HTML message
+- Unified, modern Streamlit chat UI with persistent role/model display
+- Role-preserved chat history (each message stores the role at time of sending)
+- Robust audit logging for all unauthorized access attempts
+- Fully tested with pytest (RBAC, fallback, audit, typo-tolerance)
+- Advanced semantic search and retrieval (FAISS + SentenceTransformers)
+- Modular, extensible Python/Streamlit codebase
 
 # [0.10.0] - 2026-02-23
 ### Added

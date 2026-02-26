@@ -34,7 +34,13 @@ def read_txt_md(file_path: str) -> str:
 
 def read_pdf(file_path: str) -> str:
     doc = fitz.open(file_path)
-    text = "\n".join(page.get_text() for page in doc)
+    page_texts = []
+    for page in doc:
+        # Ensure get_text returns a string
+        page_text = page.get_text() if hasattr(page, 'get_text') else str(page)
+        if isinstance(page_text, str):
+            page_texts.append(page_text)
+    text = "\n".join(page_texts)
     doc.close()
     return text
 
@@ -89,6 +95,10 @@ def ingest_documents(data_dir: str) -> pd.DataFrame:
             elif ext == 'docx':
                 text = read_docx(file_path)
             else:
+                continue
+            print(f"Chunking file: {file_path} (size: {len(text)} chars)")
+            if len(text) > 100000:
+                print(f"Skipping {file_path} due to large size ({len(text)} chars)")
                 continue
             meta = extract_metadata_from_text(text)
             chunks = chunk_text(text)

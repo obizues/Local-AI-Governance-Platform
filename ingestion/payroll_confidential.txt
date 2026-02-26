@@ -1,0 +1,3 @@
+Name: Alice Johnson | Department: HR | Title: HR Manager | Salary: $120,000
+Name: David Kim | Department: Technology | Title: Senior Engineer | Salary: $150,000
+Name: Olivia Zhang | Department: Technology | Title: CTO | Salary: $250,000
