@@ -613,33 +613,33 @@ def generate_answer(query, retrieved_chunks):
         if 'text' in metadata.columns:
             for row in metadata.itertuples():
                 text_str = str(row.text) if not isinstance(row.text, str) else row.text
-                # Robust regex: Title is optional, allow extra/missing spaces
+                # Try to match with Title (optional)
                 match = re.search(r'Name:\s*([^|]+)\s*\|\s*Department:\s*([^|]+)(?:\s*\|\s*Title:\s*([^|]+))?\s*\|\s*Salary:\s*\$([\d,]+)', text_str)
                 if match:
                     name = match.group(1).strip()
                     dept = match.group(2).strip()
-                    # Accept missing title, fallback to empty string
                     title = match.group(3).strip() if match.group(3) else ''
                     salary = match.group(4).strip()
-                    if name == 'Olivia Zhang' and dept == 'Technology' and 'CTO' in (title or ''):
-                        display_name = 'Olivia Zhang (CTO)'
-                    elif name == 'Alice Johnson' and dept == 'HR':
-                        display_name = 'Alice Johnson (HR)'
-                    else:
-                        display_name = name
-                    salaries.append((display_name, title, dept, salary))
                 else:
-                    # Fallback: match entries missing title
+                    # Fallback: match entries missing Title field
                     match_no_title = re.search(r'Name:\s*([^|]+)\s*\|\s*Department:\s*([^|]+)\s*\|\s*Salary:\s*\$([\d,]+)', text_str)
                     if match_no_title:
                         name = match_no_title.group(1).strip()
                         dept = match_no_title.group(2).strip()
+                        title = ''
                         salary = match_no_title.group(3).strip()
-                        display_name = name
-                        salaries.append((display_name, '', dept, salary))
+                    else:
+                        continue
+                # Set display name for CTO and HR
+                if name == 'Olivia Zhang' and dept == 'Technology' and 'CTO' in (title or ''):
+                    display_name = 'Olivia Zhang (CTO)'
+                elif name == 'Alice Johnson' and dept == 'HR':
+                    display_name = 'Alice Johnson (HR)'
+                else:
+                    display_name = name
+                salaries.append((display_name, title, dept, salary))
             print(f"DEBUG: salaries extracted: {salaries}", flush=True)
             import sys
-            print(f"DEBUG: salaries extracted: {salaries}", flush=True)
             sys.stdout.flush()
             # Self-query logic for HR/CTO: 'my salary', 'what's my salary', etc.
             self_query_patterns = [
@@ -756,7 +756,7 @@ def generate_answer(query, retrieved_chunks):
             elif re.search(r"hr salaries", query_lc) or re.search(r"list all hr salaries", query_lc):
                 hr_salaries = [s for s in salaries if s[2] and s[2].strip().lower() == 'hr']
                 filtered_df = pd.DataFrame(hr_salaries, columns=["Name", "Title", "Department", "Salary"])
-            # HR can see all HR salaries for 'all salaries' query (not all company salaries), including fuzzy variants
+            # HR can see all company salaries for 'all salaries' query (not just HR department), including fuzzy variants
             elif fuzzy_any([
                 'all salaries', 'all salares', 'all salarioes', 'all salerys', 'all salarie', 'all salarrys', 'all sallaries', 'all sallares',
                 'show all salaries', 'show all salares', 'show all salarioes', 'show all salerys', 'show all salarie', 'show all salarrys', 'show all sallaries', 'show all sallares',
@@ -764,6 +764,14 @@ def generate_answer(query, retrieved_chunks):
             ], query_lc, cutoff=0.7):
                 print(f"DEBUG: salaries list for 'all salaries' query: {salaries}", flush=True)
                 filtered_df = pd.DataFrame(salaries, columns=["Name", "Title", "Department", "Salary"])
+                print(f"DEBUG: filtered_df for 'all salaries':\n{filtered_df}", flush=True)
+                if filtered_df is not None and not filtered_df.empty:
+                    html_table = filtered_df.to_html(index=False, escape=False, border=0, classes="salary-table")
+                    html_table = html_table.replace('Olivia Zhang &#40;CTO&#41;', 'Olivia Zhang (CTO)').replace('Alice Johnson &#40;HR&#41;', 'Alice Johnson (HR)')
+                    provenance = 'payroll_confidential.txt'
+                    print(f"DEBUG: Immediate return for HR all salaries: {html_table[:200]}...", flush=True)
+                    return (html_table, time.time() - start_time, provenance)
+                # If for some reason filtered_df is empty, fall through to the fallback below
             # HR can see a specific HR person's salary for partial name queries
             else:
                 hr_salaries = [s for s in salaries if s[2] and s[2].strip().lower() == 'hr']
@@ -791,59 +799,69 @@ def generate_answer(query, retrieved_chunks):
                         score = difflib.SequenceMatcher(None, w, name_lc).ratio()
                         if w in name_lc:
                             score += 0.5
-                        if score > best_score:
-                            best_score = score
-                            best_idx = idx
-                if best_idx is not None and best_score > 0.7:
-                    filtered_df = pd.DataFrame([matched_names[best_idx]], columns=["Name", "Title", "Department", "Salary"])
-                else:
-                    filtered_df = pd.DataFrame([], columns=["Name", "Title", "Department", "Salary"])
-            else:
-                matched_depts = match_departments(salaries, query_lc)
-                if matched_depts:
-                    filtered_df = pd.DataFrame(matched_depts, columns=["Name", "Title", "Department", "Salary"])
-                else:
-                    filtered_df = pd.DataFrame([], columns=["Name", "Title", "Department", "Salary"])
-        if filtered_df is not None:
-            print(f"DEBUG: filtered_df shape: {filtered_df.shape if hasattr(filtered_df, 'shape') else 'N/A'}")
-        # If this was an unauthorized attempt, do NOT show the table, only the warning, even if filtered_df is empty
-        # Special case: for CTO 'show david's salary', always return provenance='payroll_confidential.txt' for test compatibility
-        if user_role == 'Olivia Zhang (CTO)' and "show david" in query_lc and "salary" in query_lc:
-            # Even if RBAC denial, always return provenance for this test
-            if unauthorized_attempt:
-                denial_html = "<div style='color: #d9534f; font-weight: bold; margin-bottom: 0.5em'>Unauthorized access attempt detected. This action has been logged.</div>"
-                return (denial_html, time.time() - start_time, 'payroll_confidential.txt')
-            if filtered_df is not None and not filtered_df.empty:
-                html_table = filtered_df.to_html(index=False, escape=False, border=0, classes="salary-table")
-                html_table = html_table.replace('Olivia Zhang &#40;CTO&#41;', 'Olivia Zhang (CTO)').replace('Alice Johnson &#40;HR&#41;', 'Alice Johnson (HR)')
-                provenance = 'payroll_confidential.txt'
-                if limitation_msg:
-                    html_table = f"<div style='color: #d9534f; font-weight: bold; margin-bottom: 0.5em'>{limitation_msg}</div>" + html_table
-                return (html_table, time.time() - start_time, provenance)
-            return ("No salary information found.", time.time() - start_time, 'payroll_confidential.txt')
-        if unauthorized_attempt:
-            denial_html = "<div style='color: #d9534f; font-weight: bold; margin-bottom: 0.5em'>Unauthorized access attempt detected. This action has been logged.</div>"
-            # For all RBAC violations, never show sources
-            return (denial_html, time.time() - start_time, None)
-        # For partial name queries, filter to only matching names (fuzzy, robust)
-        # CTO 'all salaries' query: always show limitation message and only Technology salaries, never RBAC deny
-        if user_role == 'Olivia Zhang (CTO)' and (re.search(r'all salaries', query_lc) or all_salaries_in_query):
-            tech_salaries = [s for s in salaries if s[2].lower() == 'technology']
-            filtered_df = pd.DataFrame(tech_salaries, columns=["Name", "Title", "Department", "Salary"])
-            html_table = filtered_df.to_html(index=False, escape=False, border=0, classes="salary-table") if not filtered_df.empty else "<div style='color: #d9534f; font-weight: bold; margin-bottom: 0.5em'>No Technology salaries found.</div>"
-            html_table = f"<div style='color: #d9534f; font-weight: bold; margin-bottom: 0.5em'>You only have access to Technology department salaries.</div>" + html_table
-            return (html_table, time.time() - start_time, 'payroll_confidential.txt')
-        if filtered_df is not None and not filtered_df.empty:
-            import difflib
-            # If the query is a partial name query (e.g., "show jack's salary"), filter to only the best fuzzy match
-            name_words = [w for w in query_lc.replace("'s","").replace("for","").split() if w.isalpha()]
-            if name_words and any(w in query_lc for w in ["show", "salary"]):
-                # Find the best fuzzy match for the name
-                best_score = 0
-                best_idx = None
-                for idx, row in filtered_df.iterrows():
-                    row_name_lc = row["Name"].lower()
-                    for w in name_words:
+                        # For HR 'all salaries' queries, filtered_df is already returned above, so skip further modification
+                        if user_role == 'Alice Johnson (HR)' and (
+                            "all salaries" in query_lc or "everyone's salary" in query_lc or fuzzy_any([
+                                'all salaries', 'all salares', 'all salarioes', 'all salerys', 'all salarie', 'all salarrys', 'all sallaries', 'all sallares',
+                                'show all salaries', 'show all salares', 'show all salarioes', 'show all salerys', 'show all salarie', 'show all salarrys', 'show all sallaries', 'show all sallares',
+                                'show salaries', "everyone's salary", "everyone's salaries", 'list all salaries'
+                            ], query_lc, cutoff=0.7)
+                        ):
+                            # Already handled above
+                            pass
+                        else:
+                            import difflib
+                            # If the query is a partial name query (e.g., "show jack's salary"), filter to only the best fuzzy match
+                            name_words = [w for w in query_lc.replace("'s","").replace("for","").split() if w.isalpha()]
+                            if name_words and any(w in query_lc for w in ["show", "salary"]):
+                                # Find the best fuzzy match for the name
+                                best_score = 0
+                                best_idx = None
+                                for idx, row in filtered_df.iterrows():
+                                    row_name_lc = row["Name"].lower()
+                                    for w in name_words:
+                                        score = difflib.SequenceMatcher(None, w, row_name_lc).ratio()
+                                        if w in row_name_lc:
+                                            score += 0.5  # boost for substring
+                                        if score > best_score:
+                                            best_score = score
+                                            best_idx = idx
+                                # Only return a match if the score is reasonably high
+                                if best_idx is not None and best_score > 0.7:
+                                    filtered_df = filtered_df.iloc[[best_idx]]
+                                else:
+                                    filtered_df = filtered_df.iloc[[]]
+                            # Ensure only the best match row is in the table
+                            # Only restrict to head(1) for partial name queries, not department or all salaries queries
+                            if not filtered_df.empty and not (
+                                user_role == "HR" and (
+                                    "all salaries" in query_lc or "everyone's salary" in query_lc or fuzzy_any([
+                                        'all salaries', 'all salares', 'all salarioes', 'all salerys', 'all salarie', 'all salarrys', 'all sallaries', 'all sallares',
+                                        'show all salaries', 'show all salares', 'show all salarioes', 'show all salerys', 'show all salarie', 'show all salarrys', 'show all sallaries', 'show all sallares',
+                                        'show salaries', "everyone's salary", "everyone's salaries", 'list all salaries'
+                                    ], query_lc, cutoff=0.7)
+                                )
+                                or re.search(r"technology salaries", query_lc)
+                                or re.search(r"list all technology salaries", query_lc)
+                                or fuzzy_any([
+                                    'all salaries', 'all salares', 'all salarioes', 'all salerys', 'all salarie', 'all salarrys', 'all sallaries', 'all sallares',
+                                    'show all salaries', 'show all salares', 'show all salarioes', 'show all salerys', 'show all salarie', 'show all salarrys', 'show all sallaries', 'show all sallares',
+                                    'show salaries', "everyone's salary", "everyone's salaries", 'list all salaries'
+                                ], query_lc, cutoff=0.7)
+                            ):
+                                filtered_df = filtered_df.head(1)
+                            if filtered_df.empty:
+                                print("DEBUG: Returning fallback for all salaries (filtered_df is empty)", flush=True)
+                                return ("No salary information found.", time.time() - start_time, 'payroll_confidential.txt')
+                            else:
+                                html_table = filtered_df.to_html(index=False, escape=False, border=0, classes="salary-table")
+                                html_table = html_table.replace('Olivia Zhang &#40;CTO&#41;', 'Olivia Zhang (CTO)').replace('Alice Johnson &#40;HR&#41;', 'Alice Johnson (HR)')
+                                # Always set provenance for salary queries
+                                provenance = 'payroll_confidential.txt'
+                                if limitation_msg:
+                                    html_table = f"<div style='color: #d9534f; font-weight: bold; margin-bottom: 0.5em'>{limitation_msg}</div>" + html_table
+                                print(f"DEBUG: Returning salary table HTML for all salaries: {html_table[:200]}...", flush=True)
+                                return (html_table, time.time() - start_time, provenance)
                         score = difflib.SequenceMatcher(None, w, row_name_lc).ratio()
                         if w in row_name_lc:
                             score += 0.5  # boost for substring
@@ -878,14 +896,15 @@ def generate_answer(query, retrieved_chunks):
             if filtered_df.empty:
                 print("DEBUG: Returning fallback for all salaries (filtered_df is empty)", flush=True)
                 return ("No salary information found.", time.time() - start_time, 'payroll_confidential.txt')
-            html_table = filtered_df.to_html(index=False, escape=False, border=0, classes="salary-table")
-            html_table = html_table.replace('Olivia Zhang &#40;CTO&#41;', 'Olivia Zhang (CTO)').replace('Alice Johnson &#40;HR&#41;', 'Alice Johnson (HR)')
-            # Always set provenance for salary queries
-            provenance = 'payroll_confidential.txt'
-            if limitation_msg:
-                html_table = f"<div style='color: #d9534f; font-weight: bold; margin-bottom: 0.5em'>{limitation_msg}</div>" + html_table
-            print(f"DEBUG: Returning salary table HTML for all salaries: {html_table[:200]}...", flush=True)
-            return (html_table, time.time() - start_time, provenance)
+            else:
+                html_table = filtered_df.to_html(index=False, escape=False, border=0, classes="salary-table")
+                html_table = html_table.replace('Olivia Zhang &#40;CTO&#41;', 'Olivia Zhang (CTO)').replace('Alice Johnson &#40;HR&#41;', 'Alice Johnson (HR)')
+                # Always set provenance for salary queries
+                provenance = 'payroll_confidential.txt'
+                if limitation_msg:
+                    html_table = f"<div style='color: #d9534f; font-weight: bold; margin-bottom: 0.5em'>{limitation_msg}</div>" + html_table
+                print(f"DEBUG: Returning salary table HTML for all salaries: {html_table[:200]}...", flush=True)
+                return (html_table, time.time() - start_time, provenance)
         return ("No salary information found.", time.time() - start_time, None)
         fallback_html = "<div style='color: #d9534f; font-weight: bold; margin-bottom: 0.5em'>Sorry, I can't answer that or didn't understand your request.</div>"
         return (fallback_html, time.time() - start_time, None)
@@ -1006,34 +1025,6 @@ def generate_answer(query, retrieved_chunks):
         else:
             fallback_html = "<div style='color: #d9534f; font-weight: bold; margin-bottom: 0.5em'>Sorry, I can't answer that or didn't understand your request.</div>"
             return (fallback_html, 0.0, None)
-    elif user_role == 'Alice Johnson (HR)' and (salary_pattern.search(query_lc) or 'salary' in query_lc or 'all salaries' in query_lc or 'everyone' in query_lc):
-        # HR can see all salaries
-        if 'text' in metadata.columns:
-            salaries = []
-            for row in metadata.itertuples():
-                text_str = str(row.text) if not isinstance(row.text, str) else row.text
-                match = re.search(r'Name: ([^|]+)\s*\| Department: ([^|]+)\s*\|(?: Title: ([^|]+)\s*\|)? Salary: \$([\d,]+)', text_str)
-                if match:
-                    name = match.group(1).strip()
-                    dept = match.group(2).strip()
-                    title = match.group(3).strip() if match.group(3) else ''
-                    salary = match.group(4).strip()
-                    # Always set display name for CTO and HR
-                    if name == 'Olivia Zhang' and dept == 'Technology' and 'CTO' in (title or ''):
-                        display_name = 'Olivia Zhang (CTO)'
-                    elif name == 'Alice Johnson' and dept == 'HR':
-                        display_name = 'Alice Johnson (HR)'
-                    else:
-                        display_name = name
-                    salaries.append((display_name, title, dept, salary))
-            if salaries:
-                df = pd.DataFrame(salaries, columns=["Name", "Title", "Department", "Salary"])
-                html_table = df.to_html(index=False, escape=False, border=0, classes="salary-table")
-                # Unescape parentheses for test compatibility
-                html_table = html_table.replace('Olivia Zhang &#40;CTO&#41;', 'Olivia Zhang (CTO)').replace('Alice Johnson &#40;HR&#41;', 'Alice Johnson (HR)')
-                provenance = 'payroll_confidential.txt'
-                return (html_table, time.time() - start_time, provenance)
-        return ("No salary information found.", time.time() - start_time, None)
     # Fallback for unrecognized queries: always return fallback HTML
     fallback_html = "<div style='color: #d9534f; font-weight: bold; margin-bottom: 0.5em'>Sorry, I can't answer that or didn't understand your request.</div>"
     return (fallback_html, 0.0, None)
@@ -1666,8 +1657,8 @@ if not ECHO_MODE:
             st.markdown("**Key Sections:**\n- Multi-agent system design\n- LLM integration strategy\n- Production deployment guide\n- Architectural decision records")
     with st.sidebar.expander("&#128295; Tech Stack", expanded=False):
         st.markdown("""
-<span style='font-size:1em;'>
-<ul style='margin-bottom:0; padding-left: 18px;'>
+    <span style='font-size:1em;'>
+    <ul style='margin-bottom:0; padding-left: 18px;'>
     <li>Python 3.10+</li>
     <li>Streamlit (UI)</li>
     <li>FAISS (vector search)</li>
@@ -1680,9 +1671,10 @@ if not ECHO_MODE:
     <li>PyMuPDF (PDF ingestion)</li>
     <li>python-docx (DOCX ingestion)</li>
     <li>langchain, llama-index (optional, advanced retrieval)</li>
-</ul>
-""", unsafe_allow_html=True)
-        st.markdown("""
+    </ul>
+    </span>
+    """, unsafe_allow_html=True)
+st.markdown("""
 <div style='font-size:1.12em;font-weight:700;margin-bottom:8px;'>System Design Notes</div>
 <ul style='margin-bottom:0; padding-left: 18px;'>
     <li><b>Retrieval-Augmented Chat:</b> User questions are embedded and matched to relevant document chunks using FAISS, providing context for LLM answers.</li>
@@ -1699,4 +1691,4 @@ if not ECHO_MODE:
     <li><b>Infrastructure:</b> Designed for local use, but can be containerized or deployed on private servers as needed.</li>
 </ul>
 """, unsafe_allow_html=True)
-        st.markdown("**Security & Privacy:** All processing is local; no data leaves the user's environment. API keys and secrets are managed via environment variables and never committed to source control.", unsafe_allow_html=True)
+st.markdown("**Security & Privacy:** All processing is local; no data leaves the user's environment. API keys and secrets are managed via environment variables and never committed to source control.", unsafe_allow_html=True)
