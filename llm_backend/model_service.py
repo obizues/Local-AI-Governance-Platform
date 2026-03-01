@@ -26,3 +26,22 @@ def load_faiss_index(index_path):
 @st.cache_resource(show_spinner=True)
 def load_metadata(metadata_path):
     return pd.read_csv(metadata_path)
+
+def extract_salaries_from_metadata(metadata_df):
+    """
+    Extract salary tuples (name, title, dept, salary) from a DataFrame with a 'text' column.
+    Returns a list of tuples: (name, title, dept, salary)
+    """
+    salaries = []
+    if isinstance(metadata_df, pd.DataFrame) and 'text' in metadata_df.columns:
+        for row in metadata_df.itertuples():
+            text_str = str(row.text) if not isinstance(row.text, str) else row.text
+            import re
+            match = re.search(r'Name:\s*([^|]+)\s*\|\s*Department:\s*([^|]+)(?:\s*\|\s*Title:\s*([^|]+))?\s*\|\s*Salary:\s*\$([\d,]+)', text_str)
+            if match:
+                name = match.group(1).strip()
+                dept = match.group(2).strip()
+                title = match.group(3).strip() if match.group(3) else ''
+                salary = match.group(4).strip()
+                salaries.append((name, title, dept, salary))
+    return salaries

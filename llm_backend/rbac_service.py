@@ -1,3 +1,7 @@
+import os
+def write_audit_log(message):
+    with open('access_audit.log', 'a', encoding='utf-8') as audit_log:
+        audit_log.write(message)
 """
 RBAC and salary access logic for the chatbot.
 Extracted from ui/app.py for testability and maintainability.
@@ -27,6 +31,8 @@ def check_engineer_salary_access(user_role, query, metadata, fuzzy_any):
     forbidden_keywords = ["hr", "human resources", "cto", "payroll", "confidential", "department", "onboarding", "engineering", "technology", "alice johnson", "olivia zhang", "bob smith", "nguyen", "carol lee", "emily chen", "grace patel", "isabella brown", "jack wilson"]
     for kw in forbidden_keywords:
         if kw in query_lc or fuzzy_any([kw], query_lc, cutoff=0.8):
+            # Audit log for unauthorized access
+            write_audit_log(f"Unauthorized access attempt by {user_role} for query: '{query}'\n")
             return {"denied": True, "message": "<div style='color: #d9534f; font-weight: bold; margin-bottom: 0.5em'>You only have access to your own salary.<br>Unauthorized access attempt detected. This action has been logged.</div>"}
     is_self_query = any(query_lc.strip() == q for q in allowed_self_queries)
     if not is_self_query:

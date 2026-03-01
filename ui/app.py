@@ -39,22 +39,34 @@ def write_audit_log(message):
     with open('access_audit.log', 'a', encoding='utf-8') as audit_log:
         audit_log.write(message)
 
-# --- Top blue app title bar ---
+
+# --- Top blue app title bar (centered, above personal info) ---
 st.markdown(
     """
     <style>
+        .main-title-banner {
+            background: #1976d2;
+            color: #fff;
+            font-size: 1.45em;
+            font-weight: 700;
+            text-align: center;
             margin: 0 auto 0 auto;
             padding: 0.7em 0 0.7em 0;
             box-sizing: border-box;
-            border-radius: 0 0 16px 16px;
-            box-shadow: 0 2px 8px rgba(25, 118, 210, 0.08);
+            border-radius: 0 0 18px 18px;
+            box-shadow: 0 2px 8px rgba(25, 118, 210, 0.10);
             letter-spacing: 0.01em;
             max-width: 700px;
-        # end dept_map
-        .top-title-banner { font-size: 1.3em; }
+        }
+        .main-title-banner .emoji {
+            font-size: 1.3em;
+            vertical-align: middle;
+            margin-right: 0.18em;
+            filter: none;
+        }
     </style>
-    <div class="top-title-banner">
-        &#129302; Local AI Chatbot POC
+    <div class="main-title-banner">
+        <span class="emoji">🤖</span> Local AI Chatbot POC
     </div>
     """, unsafe_allow_html=True)
 
@@ -153,38 +165,22 @@ ROLE_DESCRIPTIONS = {
 if 'user_role' not in st.session_state:
     st.session_state['user_role'] = ROLES[0]
 
-
-
-
 # --- Model caching using Streamlit's cache_resource ---
+# Preload metadata and warm up cache at app startup
+from llm_backend.model_service import load_metadata
+import os
+project_root = os.path.dirname(os.path.abspath(__file__))
+metadata_path = os.path.join(project_root, '..', 'vector_db', 'metadata.csv')
+try:
+    _ = load_metadata(metadata_path)
+    print(f"[Cache Warmup] Metadata loaded and cached at startup from: {metadata_path}")
+except Exception as e:
+    print(f"[Cache Warmup] Failed to preload metadata: {e}")
 
 
 EMBED_MODEL_NAME = 'all-MiniLM-L6-v2'
-embed_model = load_embed_model()
-llm, gen_model_display = load_llm_pipeline(GEN_MODEL_NAME)
 
-
-
-# All model loading is now handled by the cached functions above:
-
-# Model and data loading (now via backend service)
-embed_model = load_embed_model()
-
-# Model selection logic: only load LLM pipeline when model changes
-if 'selected_model' not in st.session_state:
-    st.session_state['selected_model'] = 'gpt2'
-if 'llm' not in st.session_state or 'gen_model_display' not in st.session_state:
-    st.session_state['llm'], st.session_state['gen_model_display'] = load_llm_pipeline(st.session_state['selected_model'])
-
-# Data loading
-
-project_root = os.path.dirname(os.path.abspath(__file__))
-index_path = os.path.join(project_root, '..', 'vector_db', 'faiss_index.bin')
-metadata_path = os.path.join(project_root, '..', 'vector_db', 'metadata.csv')
-chunks_path = os.path.join(project_root, '..', 'ingestion', 'document_chunks.csv')
-
-faiss_index = load_faiss_index(index_path)
-metadata = load_metadata(metadata_path)
+# Model, embedding, index, and metadata loading is now handled by backend services or session state only.
 # --- Move retrieve and generate_answer above chat UI ---
 # --- Load FAISS index and metadata ---
 import numpy as np
@@ -207,18 +203,9 @@ if 'metadata' not in st.session_state:
         st.session_state['metadata'] = temp_df
         print(f"DEBUG: metadata DataFrame head after session_state assign:\n{st.session_state['metadata'].head(10)}", flush=True)
 
-        # DEBUG: Always extract salaries and print for debugging
-        salaries = []
-        if 'text' in temp_df.columns:
-            for row in temp_df.itertuples():
-                text_str = str(row.text) if not isinstance(row.text, str) else row.text
-                match = re.search(r'Name:\s*([^|]+)\s*\|\s*Department:\s*([^|]+)(?:\s*\|\s*Title:\s*([^|]+))?\s*\|\s*Salary:\s*\$([\d,]+)', text_str)
-                if match:
-                    name = match.group(1).strip()
-                    dept = match.group(2).strip()
-                    title = match.group(3).strip() if match.group(3) else ''
-                    salary = match.group(4).strip()
-                    salaries.append((name, title, dept, salary))
+        # Use backend utility for salary extraction
+        from llm_backend.model_service import extract_salaries_from_metadata
+        salaries = extract_salaries_from_metadata(temp_df)
         print(f"DEBUG: salaries extracted (unconditional): {salaries}", flush=True)
     elif os.path.exists(chunks_path):
         print(f"DEBUG: metadata_path missing, loading chunks_path: {chunks_path}", flush=True)
@@ -282,68 +269,6 @@ if 'selected_model' not in st.session_state or st.session_state['selected_model'
     st.session_state['llm'], st.session_state['gen_model_display'] = load_llm_pipeline(model_name)
     st.session_state['last_model_name'] = model_name
 
-def retrieve(query, top_k=3):
-    # Placeholder for retrieve logic. Actual logic moved to backend or needs to be re-implemented.
-    st.warning('Retrieve logic is not implemented. Please update this section.')
-    return pd.DataFrame()
-    query_emb = embed_model.encode([query]).astype('float32')
-    if len(query_emb.shape) == 1:
-        query_emb = query_emb.reshape(1, -1)
-    top_k = 5  # Retrieve more chunks for richer answers
-    # Ensure query_emb is contiguous float32 (n, d)
-    if not query_emb.flags['C_CONTIGUOUS']:
-        query_emb = np.ascontiguousarray(query_emb, dtype='float32')
-    if query_emb.ndim != 2:
-        raise ValueError(f"query_emb must be 2D (n, d), got shape {query_emb.shape}")
-    try:
-        if hasattr(index, 'search') and index.ntotal > 0:
-            D, I = index.search(query_emb, top_k)
-        else:
-            D, I = np.array([]), np.array([])
-    except Exception as e:
-        D, I = np.array([]), np.array([])
-    # Defensive: I is a 2D numpy array (n_queries, top_k)
-    if hasattr(I, '__getitem__') and len(I) > 0 and hasattr(I[0], '__iter__'):
-        idxs = [i for i in I[0] if i >= 0]
-        results = metadata.iloc[idxs] if len(idxs) > 0 else pd.DataFrame()
-    else:
-        results = pd.DataFrame()
-    # If the query is about deployment, always include the deploy_software_sop chunk
-    if 'deploy' in query.lower() or 'deployment' in query.lower():
-        sop_mask = metadata['file'].astype(str).str.contains('deploy_software_sop', case=False, na=False)
-        sop_chunk = metadata[sop_mask]
-        if not sop_chunk.empty:
-            if 'file' in results.columns:
-                in_results = results['file'].astype(str).str.contains('deploy_software_sop', case=False, na=False)
-                if not in_results.any():
-                    results = pd.concat([results, sop_chunk], ignore_index=True)
-            elif not results.empty:
-                results = pd.concat([results, sop_chunk], ignore_index=True)
-            else:
-                results = sop_chunk.copy()
-
-    # If the query is about PTO/vacation, always include the vacation_policy chunk
-    pto_keywords = ['pto', 'paid time off', 'vacation', 'leave', 'holiday']
-    if any(kw in query.lower() for kw in pto_keywords):
-        vac_mask = metadata['file'].astype(str).str.contains('vacation_policy', case=False, na=False)
-        vac_chunk = metadata[vac_mask]
-        if not vac_chunk.empty:
-            if 'file' in results.columns:
-                in_results = results['file'].astype(str).str.contains('vacation_policy', case=False, na=False)
-                if not in_results.any():
-                    results = pd.concat([results, vac_chunk], ignore_index=True)
-            elif not results.empty:
-                results = pd.concat([results, vac_chunk], ignore_index=True)
-            else:
-                results = vac_chunk.copy()
-    # RBAC: Filter Technology department salary data for non-CTO roles
-    user_role = st.session_state.get('user_role', None)
-    if user_role != 'CTO' and 'salary' in query.lower():
-        # Remove Technology department salary chunks
-        if not results.empty and 'text' in results.columns:
-            mask = ~results['text'].astype(str).str.contains('Department: Technology', case=False, na=False)
-            results = results[mask]
-    return results
 
 if 'history' not in st.session_state:
     st.session_state['history'] = []
@@ -655,7 +580,7 @@ if not ECHO_MODE:
     st.sidebar.markdown("""
 <div style='background:#eaf6ff;border:1.5px solid #b3e5fc;padding:10px 12px 8px 12px;margin-bottom:12px;text-align:center;border-radius:8px;'>
     <span style='font-size:1.08em;font-weight:600;color:#1976d2;'>&#128241; App version:</span><br>
-    <span style='font-size:1.05em;color:#222;'>v1.0.3 - Enterprise RBAC, Role-Preserved Chat, Modern UI</span>
+    <span style='font-size:1.05em;color:#222;'>v1.0.4 - Enterprise RBAC, Role-Preserved Chat, Modern UI</span>
 </div>
 <div class='sidebar-card' style='background:#eaf6ff;font-size:0.93em;margin-bottom:16px;border:1.5px solid #b3e5fc;padding:8px 8px 6px 8px;'>
     <div style='font-weight:700;font-size:1em;line-height:1.2;margin-bottom:2px;text-align:center;'>

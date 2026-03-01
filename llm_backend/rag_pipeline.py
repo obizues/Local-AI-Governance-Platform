@@ -26,6 +26,10 @@ def generate_answer(query, retrieved_chunks):
     context = "\n".join(retrieved_chunks['text'].tolist())
     prompt = f"Context:\n{context}\n\nQuestion: {query}\nAnswer:"
     response = llm(prompt)[0]['generated_text']
+    # Fallback: if context is empty or LLM output is too short or just repeats the query, return fallback message
+    fallback = "Sorry, I can't answer that or didn't understand your request."
+    if not context.strip() or len(response.strip()) < 10 or query.lower() in response.lower():
+        return fallback
     return response
 
 if __name__ == "__main__":
