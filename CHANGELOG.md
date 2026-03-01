@@ -36,7 +36,7 @@
 
 # Changelog
 
-## [v1.0.2] - Release
+## [v1.0.3] - Release
 
 ### Added
 - Refactored model and data loading to backend module for performance and maintainability

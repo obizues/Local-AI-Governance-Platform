@@ -1792,3 +1792,9 @@ user_input: show my salary
 start_total: 1772330345.619059
 end_total: 1772330345.666361
 total_response_time: 0.0473020076751709
+
+--- 2026-03-01 02:03:19.588207 ---
+user_input: show all salaries
+start_total: 1772330599.5017734
+end_total: 1772330599.5865092
+total_response_time: 0.08473587036132812

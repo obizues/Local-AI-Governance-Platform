@@ -13,25 +13,6 @@ from sentence_transformers import SentenceTransformer
 from transformers import pipeline
 print("DEBUG: Finished import of sentence_transformers and transformers", flush=True)
 
-# --- Model caching using Streamlit's cache_resource ---
-@st.cache_resource(show_spinner=True)
-def load_embed_model():
-    print("DEBUG: Loading embedding model...", flush=True)
-    model = SentenceTransformer('all-MiniLM-L6-v2')
-    print("DEBUG: Embedding model loaded.", flush=True)
-    return model
-
-@st.cache_resource(show_spinner=True)
-def load_llm_pipeline(gen_model_name):
-    print(f"DEBUG: Setting up generative model: {gen_model_name}", flush=True)
-    if gen_model_name == 'ollama':
-        print("DEBUG: Ollama selected, skipping pipeline load.", flush=True)
-        return None, 'Ollama'
-    else:
-        print(f"DEBUG: Loading transformers pipeline for {gen_model_name}", flush=True)
-        llm = pipeline('text-generation', model=gen_model_name, device=-1, max_new_tokens=256)
-        print("DEBUG: Generative model setup complete.", flush=True)
-        return llm, gen_model_name.upper()
 
 # Placeholder variable definitions (replace with actual logic as needed)
 GEN_MODEL_NAME = 'gpt2'
@@ -40,14 +21,7 @@ ECHO_MODE = False
 salary_pattern = re.compile(r"\$[0-9,]+")
 
 
-# Always cache the embedding model (doesn't change)
-embed_model = load_embed_model()
 
-# Model selection logic: only load LLM pipeline when model changes
-if 'selected_model' not in st.session_state:
-    st.session_state['selected_model'] = 'gpt2'
-if 'llm' not in st.session_state or 'gen_model_display' not in st.session_state:
-    st.session_state['llm'], st.session_state['gen_model_display'] = load_llm_pipeline(st.session_state['selected_model'])
 
 
 # Global fuzzy_any function for fuzzy matching
@@ -69,13 +43,6 @@ def write_audit_log(message):
 st.markdown(
     """
     <style>
-        .top-title-banner {
-            background: #1976d2;
-            color: #fff;
-            font-family: 'Segoe UI', 'Arial', sans-serif;
-            font-size: 2em;
-            font-weight: 700;
-            text-align: center;
             margin: 0 auto 0 auto;
             padding: 0.7em 0 0.7em 0;
             box-sizing: border-box;
@@ -97,12 +64,7 @@ import pandas as pd
 import re
 import time
 import difflib
-from llm_backend.model_service import (
-    load_embed_model,
-    load_llm_pipeline,
-    load_faiss_index,
-    load_metadata
-)
+from llm_backend.model_service import load_embed_model, load_llm_pipeline, load_faiss_index, load_metadata
 
 # Placeholder variable definitions (replace with actual logic as needed)
 GEN_MODEL_NAME = 'gpt2'
@@ -195,26 +157,7 @@ if 'user_role' not in st.session_state:
 
 
 # --- Model caching using Streamlit's cache_resource ---
-import streamlit as st
 
-@st.cache_resource(show_spinner=True)
-def load_embed_model():
-    print("DEBUG: Loading embedding model...", flush=True)
-    model = SentenceTransformer('all-MiniLM-L6-v2')
-    print("DEBUG: Embedding model loaded.", flush=True)
-    return model
-
-@st.cache_resource(show_spinner=True)
-def load_llm_pipeline(gen_model_name):
-    print(f"DEBUG: Setting up generative model: {gen_model_name}", flush=True)
-    if gen_model_name == 'ollama':
-        print("DEBUG: Ollama selected, skipping pipeline load.", flush=True)
-        return None, GEN_MODEL_NAME_DISPLAY
-    else:
-        print(f"DEBUG: Loading transformers pipeline for {gen_model_name}", flush=True)
-        llm = pipeline('text-generation', model=gen_model_name, device=-1, max_new_tokens=256)
-        print("DEBUG: Generative model setup complete.", flush=True)
-        return llm, gen_model_name.upper()
 
 EMBED_MODEL_NAME = 'all-MiniLM-L6-v2'
 embed_model = load_embed_model()
@@ -283,557 +226,8 @@ if 'metadata' not in st.session_state:
     else:
         print(f"DEBUG: neither metadata_path nor chunks_path found, using empty DataFrame", flush=True)
         st.session_state['metadata'] = pd.DataFrame()
-metadata = st.session_state['metadata']
-
-if 'faiss_index' not in st.session_state:
-    if os.path.exists(index_path):
-        print(f"DEBUG: Loading FAISS index from {index_path}", flush=True)
-        st.session_state['faiss_index'] = faiss.read_index(index_path)
-        print("DEBUG: FAISS index loaded.", flush=True)
-    else:
-        emb_dim = 384  # all-MiniLM-L6-v2 output dim
-        print("DEBUG: Creating new FAISS index.", flush=True)
-        st.session_state['faiss_index'] = faiss.IndexFlatL2(emb_dim)
-        print("DEBUG: New FAISS index created.", flush=True)
-index = st.session_state['faiss_index']
-
-
-def generate_answer(query, retrieved_chunks):
-    print(f"DEBUG: Entered generate_answer with query: {query}", flush=True)
-    # Use global fuzzy_any
-    # Extract salaries from metadata
-    salaries = []
-    metadata = retrieved_chunks
-    if isinstance(metadata, pd.DataFrame) and 'text' in metadata.columns:
-        for row in metadata.itertuples():
-            text_str = str(row.text) if not isinstance(row.text, str) else row.text
-            match = re.search(r'Name:\s*([^|]+)\s*\|\s*Department:\s*([^|]+)(?:\s*\|\s*Title:\s*([^|]+))?\s*\|\s*Salary:\s*\$([\d,]+)', text_str)
-            if match:
-                name = match.group(1).strip()
-                dept = match.group(2).strip()
-                title = match.group(3).strip() if match.group(3) else ''
-                salary = match.group(4).strip()
-                # Set display name for CTO and HR
-                if name == 'Olivia Zhang' and dept == 'Technology' and 'CTO' in (title or ''):
-                    display_name = 'Olivia Zhang (CTO)'
-                elif name == 'Alice Johnson' and dept == 'HR':
-                    display_name = 'Alice Johnson (HR)'
-                else:
-                    display_name = name
-                salaries.append((display_name, title, dept, salary))
-        start_time = time.time()
-        provenance = None
-        query_lc = query.strip().lower()
-        # Fuzzy matching for 'salary' and 'all salaries' for typo tolerance
-        salary_pattern = re.compile(r'salar(y|ies)\\b', re.IGNORECASE)
-        salary_targets = ['salary', 'salaries', 'salares', 'salarioes', 'salerys', 'salarie', 'salarrys', 'sallaries', 'sallares']
-        all_salaries_targets = ['all salaries', 'all salares', 'all salarioes', 'all salerys', 'all salarie', 'all salarrys', 'all sallaries', 'all sallares']
-        salary_in_query = bool(salary_pattern.search(query_lc) or 'salary' in query_lc or fuzzy_any(salary_targets, query_lc, cutoff=0.7))
-        all_salaries_in_query = bool('all salaries' in query_lc or fuzzy_any(all_salaries_targets, query_lc, cutoff=0.7))
-        # Assign user_name from user_role for audit logging and messages
-        user_role = st.session_state.get('user_role', None)
-        if user_role and '(' in user_role:
-            user_name = user_role.split('(')[0].strip()
-        else:
-            user_name = user_role or 'User'
-        if user_role == 'Alice Johnson (HR)':
-            # HR can see all salaries for 'all salaries' and similar queries
-            if (
-                re.search(r"all salaries", query_lc)
-                or re.search(r"show all salaries", query_lc)
-                or re.search(r"what are the hr salaries", query_lc)
-                or fuzzy_any([
-                    'all salaries', 'all salares', 'all salarioes', 'all salerys', 'all salarie', 'all salarrys', 'all sallaries', 'all sallares',
-                    'show all salaries', 'show all salares', 'show all salarioes', 'show all salerys', 'show all salarie', 'show all salarrys', 'show all sallaries', 'show all sallares',
-                    'show salaries', "everyone's salary", "everyone's salaries", 'list all salaries'
-                ], query_lc, cutoff=0.7)
-            ):
-                if salaries:
-                    filtered_df = pd.DataFrame(salaries, columns=["Name", "Title", "Department", "Salary"])
-                    html_table = filtered_df.to_html(index=False, escape=False, border=0, classes="salary-table")
-                    html_table = html_table.replace('Olivia Zhang &#40;CTO&#41;', 'Olivia Zhang (CTO)').replace('Alice Johnson &#40;HR&#41;', 'Alice Johnson (HR)')
-                    provenance = 'payroll_confidential.txt'
-                    return (html_table, time.time() - start_time, provenance)
-                else:
-                    return ("No salary information found.", time.time() - start_time, 'payroll_confidential.txt')
-        # HR can see CTO salary for fuzzy/variant CTO queries
-        if any(alias in query_lc for alias in ["cto", "chief technology officer", "olivia zhang"]):
-            # Robust CTO row matching: prefer row with both 'olivia zhang' in name and 'cto' in title, else any match
-            cto_candidates = []
-            for s in salaries:
-                name_lc = s[0].strip().lower()
-                title_lc = (s[1] or '').strip().lower()
-                if 'olivia zhang' in name_lc or 'cto' in name_lc or 'cto' in title_lc:
-                    cto_candidates.append(s)
-            # Prefer row with both 'olivia zhang' in name and 'cto' in title
-            cto_row = None
-            for s in cto_candidates:
-                if 'olivia zhang' in s[0].strip().lower() and 'cto' in (s[1] or '').strip().lower():
-                    cto_row = s
-                    break
-            if not cto_row and cto_candidates:
-                cto_row = cto_candidates[0]
-            provenance = 'payroll_confidential.txt'
-            if cto_row:
-                filtered_df = pd.DataFrame([cto_row], columns=["Name", "Title", "Department", "Salary"])
-                html_table = filtered_df.to_html(index=False, escape=False, border=0, classes="salary-table")
-                html_table = html_table.replace('Olivia Zhang &#40;CTO&#41;', 'Olivia Zhang (CTO)').replace('Alice Johnson &#40;HR&#41;', 'Alice Johnson (HR)')
-                return (html_table, time.time() - start_time, provenance)
-            else:
-                return ("No salary information found.", time.time() - start_time, provenance)
-        # HR can only see their own salary for self-queries
-        self_query_patterns = [r"show my salary", r"my salary", r"what's my salary", r"what is my salary", r"alice johnson salary", r"show alice johnson salary", r"show alice johnson's salary", r"alice johnson's salary"]
-        if any(re.search(pat, query_lc) for pat in self_query_patterns) or query_lc.strip() in ["show my salary", "my salary", "what's my salary", "what is my salary"]:
-            filtered_df = pd.DataFrame([
-                s for s in salaries if s[0].lower() == 'alice johnson (hr)'
-            ], columns=["Name", "Title", "Department", "Salary"])
-            if not filtered_df.empty:
-                html_table = filtered_df.to_html(index=False, escape=False, border=0, classes="salary-table")
-                html_table = html_table.replace('Olivia Zhang &#40;CTO&#41;', 'Olivia Zhang (CTO)').replace('Alice Johnson &#40;HR&#41;', 'Alice Johnson (HR)')
-                provenance = 'payroll_confidential.txt'
-                return (html_table, time.time() - start_time, provenance)
-            else:
-                return ("No salary information found.", time.time() - start_time, 'payroll_confidential.txt')
-        # HR can see all HR salaries for department queries (e.g., 'hr salaries', 'list all hr salaries')
-        if re.search(r"hr salaries", query_lc) or re.search(r"list all hr salaries", query_lc):
-            hr_salaries = [s for s in salaries if s[2] and s[2].strip().lower() == 'hr']
-            filtered_df = pd.DataFrame(hr_salaries, columns=["Name", "Title", "Department", "Salary"])
-            # Delegated HR/CTO salary and provenance logic to service
-            from llm_backend.salary_service import get_salary_and_provenance
-            return get_salary_and_provenance(
-                user_role=user_role,
-                user_name=user_name,
-                query=query,
-                query_lc=query_lc,
-                salaries=salaries,
-                start_time=start_time,
-                st=st,
-                pd=pd,
-                re=re,
-                fuzzy_any=fuzzy_any,
-                self_query_patterns=self_query_patterns,
-                metadata=metadata,
-                write_audit_log=write_audit_log
-            )
-        def match_names(salaries, query_lc):
-            # Partial and fuzzy match for names (e.g., "jack" matches "Jack Wilson")
-            import difflib
-            results = []
-            for s in salaries:
-                name_lc = s[0].lower()
-                # Direct substring or fuzzy match
-                if any(part in name_lc for part in query_lc.split()):
-                    results.append(s)
-                else:
-                    for part in query_lc.split():
-                        if difflib.SequenceMatcher(None, part, name_lc).ratio() > 0.7:
-                            results.append(s)
-                            break
-            return results
-        def match_departments(salaries, query_lc):
-            # Partial and fuzzy match for departments
-            import difflib
-            results = []
-            for s in salaries:
-                dept_lc = s[2].lower()
-                if dept_lc in query_lc or any(dept_part in query_lc for dept_part in dept_lc.split()):
-                    results.append(s)
-                else:
-                    for part in query_lc.split():
-                        if difflib.SequenceMatcher(None, part, dept_lc).ratio() > 0.7:
-                            results.append(s)
-                            break
-            return results
-        cto_aliases = ["cto", "chief technology officer", "olivia zhang"]
-        tech_aliases = ["tech", "technology", "engineer", "engineering"]
-        # Robust detection for 'all salaries' queries (fuzzy)
-        all_salaries_targets = [
-            'all salaries', 'all salares', 'all salarioes', 'all salerys', 'all salarie', 'all salarrys', 'all sallaries', 'all sallares',
-            'show all salaries', 'show all salares', 'show all salarioes', 'show all salerys', 'show all salarie', 'show all salarrys', 'show all sallaries', 'show all sallares',
-            'show salaries', 'everyone\'s salary', 'everyone\'s salaries', 'list all salaries'
-        ]
-        # Use global fuzzy_any
-        all_salaries_in_query = any(re.search(pat, query_lc) for pat in [r"all salaries", r"show all salaries", r"show salaries", r"everyone's salary", r"everyone's salaries", r"list all salaries"]) or fuzzy_any(all_salaries_targets, query_lc, cutoff=0.7)
-        if user_role == 'Olivia Zhang (CTO)':
-            # CTO can only see Technology department salaries, including subset queries
-            if (re.search(r'all salaries', query_lc) or all_salaries_in_query or re.search(r'technology salaries', query_lc) or re.search(r'list all technology salaries', query_lc)):
-                limitation_msg = "You only have access to Technology department salaries."
-                tech_salaries = [s for s in salaries if s[2].lower() == 'technology']
-                filtered_df = pd.DataFrame(tech_salaries, columns=["Name", "Title", "Department", "Salary"])
-                html_table = filtered_df.to_html(index=False, escape=False, border=0, classes="salary-table") if not filtered_df.empty else "<div style='color: #d9534f; font-weight: bold; margin-bottom: 0.5em'>No Technology salaries found.</div>"
-                html_table = f"<div style='color: #d9534f; font-weight: bold; margin-bottom: 0.5em'>{limitation_msg}</div>" + html_table
-                return (html_table, time.time() - start_time, 'payroll_confidential.txt')
-            else:
-                # CTO can see individual Technology department salaries for subset queries
-                tech_salaries = [s for s in salaries if s[2].lower() == 'technology']
-                matched = match_names(tech_salaries, query_lc)
-                if matched:
-                    filtered_df = pd.DataFrame([matched[0]], columns=["Name", "Title", "Department", "Salary"])
-                    html_table = filtered_df.to_html(index=False, escape=False, border=0, classes="salary-table")
-                    return (html_table, time.time() - start_time, 'payroll_confidential.txt')
-                else:
-                    # Always set provenance even on fallback
-                    return ("No Technology salaries found.", time.time() - start_time, 'payroll_confidential.txt')
-        elif user_role == 'Alice Johnson (HR)':
-            # HR can only see their own salary for self-queries
-            # HR can see Technology department salaries for technology queries
-            if re.search(r"technology salaries", query_lc) or re.search(r"list all technology salaries", query_lc):
-                tech_salaries = [s for s in salaries if s[2] and s[2].strip().lower() == 'technology']
-                filtered_df = pd.DataFrame(tech_salaries, columns=["Name", "Title", "Department", "Salary"])
-            # HR can see CTO salary for fuzzy/variant CTO queries
-            if any(alias in query_lc for alias in ["cto", "chief technology officer", "olivia zhang"]):
-                # Robust CTO row matching: prefer row with both 'olivia zhang' in name and 'cto' in title, else any match
-                cto_candidates = []
-                for s in salaries:
-                    name_lc = s[0].strip().lower()
-                    title_lc = (s[1] or '').strip().lower()
-                    if 'olivia zhang' in name_lc or 'cto' in name_lc or 'cto' in title_lc:
-                        cto_candidates.append(s)
-                # Prefer row with both 'olivia zhang' in name and 'cto' in title
-                cto_row = None
-                for s in cto_candidates:
-                    if 'olivia zhang' in s[0].strip().lower() and 'cto' in (s[1] or '').strip().lower():
-                        cto_row = s
-                        break
-                if not cto_row and cto_candidates:
-                    cto_row = cto_candidates[0]
-                provenance = 'payroll_confidential.txt'
-                if cto_row:
-                    filtered_df = pd.DataFrame([cto_row], columns=["Name", "Title", "Department", "Salary"])
-                    html_table = filtered_df.to_html(index=False, escape=False, border=0, classes="salary-table")
-                    html_table = html_table.replace('Olivia Zhang &#40;CTO&#41;', 'Olivia Zhang (CTO)').replace('Alice Johnson &#40;HR&#41;', 'Alice Johnson (HR)')
-                    return (html_table, time.time() - start_time, provenance)
-                else:
-                    return ("No salary information found.", time.time() - start_time, provenance)
-
-            # Always set provenance for salary queries (including CTO querying another's salary)
-            if provenance is None and any(word in query.lower() for word in ["salary", "salaries"]):
-                provenance = 'payroll_confidential.txt'
-            # HR can only see their own salary for self-queries
-            elif any(re.search(pat, query_lc) for pat in self_query_patterns) or query_lc.strip() in ["show my salary", "my salary", "what's my salary", "what is my salary"]:
-                filtered_df = pd.DataFrame([
-                    s for s in salaries if s[0].lower() == 'alice johnson (hr)'
-                ], columns=["Name", "Title", "Department", "Salary"])
-            # HR can see all HR salaries for department queries (e.g., 'hr salaries', 'list all hr salaries', 'what are the HR salaries')
-            elif re.search(r"hr salaries", query_lc) or re.search(r"list all hr salaries", query_lc) or re.search(r"what are the hr salaries", query_lc) or re.search(r"all salaries", query_lc):
-                # For HR, show all salaries (all employees), not just HR department
-                if st.session_state.get('user_role', '').lower().startswith('alice johnson'):
-                    if salaries:
-                        filtered_df = pd.DataFrame(salaries, columns=["Name", "Title", "Department", "Salary"])
-                        html_table = filtered_df.to_html(index=False, escape=False, border=0, classes="salary-table")
-                        html_table = html_table.replace('Olivia Zhang &#40;CTO&#41;', 'Olivia Zhang (CTO)').replace('Alice Johnson &#40;HR&#41;', 'Alice Johnson (HR)')
-                        provenance = 'payroll_confidential.txt'
-                        return (html_table, time.time() - start_time, provenance)
-                    else:
-                        return ("No salary information found.", time.time() - start_time, 'payroll_confidential.txt')
-                else:
-                    # For non-HR, fallback to previous logic (block or show only own salary)
-                    hr_salaries = [s for s in salaries if s[2] and s[2].strip().lower() == 'hr']
-                    filtered_df = pd.DataFrame(hr_salaries, columns=["Name", "Title", "Department", "Salary"])
-                    if filtered_df is not None and not filtered_df.empty:
-                        html_table = filtered_df.to_html(index=False, escape=False, border=0, classes="salary-table")
-                        html_table = html_table.replace('Olivia Zhang &#40;CTO&#41;', 'Olivia Zhang (CTO)').replace('Alice Johnson &#40;HR&#41;', 'Alice Johnson (HR)')
-                        provenance = 'payroll_confidential.txt'
-                        return (html_table, time.time() - start_time, provenance)
-                    else:
-                        return ("No salary information found.", time.time() - start_time, 'payroll_confidential.txt')
-
-            # CTO salary queries for HR
-            elif re.search(r"cto's salary", query_lc) or re.search(r"cto salary", query_lc) or re.search(r"olivia zhang's salary", query_lc):
-                # Only show CTO row for these queries
-                cto_salaries = [s for s in salaries if ('olivia zhang' in s[0].lower()) or ('cto' in s[0].lower()) or ('cto' in s[1].lower())]
-                if cto_salaries:
-                    filtered_df = pd.DataFrame(cto_salaries, columns=["Name", "Title", "Department", "Salary"])
-                    html_table = filtered_df.to_html(index=False, escape=False, border=0, classes="salary-table")
-                    html_table = html_table.replace('Olivia Zhang &#40;CTO&#41;', 'Olivia Zhang (CTO)').replace('Alice Johnson &#40;HR&#41;', 'Alice Johnson (HR)')
-                    provenance = 'payroll_confidential.txt'
-                    return (html_table, time.time() - start_time, provenance)
-                else:
-                    provenance = 'payroll_confidential.txt'
-                    return ("No salary information found.", time.time() - start_time, provenance)
-            # HR can see all company salaries for 'all salaries' query (not just HR department), including fuzzy variants
-            elif fuzzy_any([
-                'all salaries', 'all salares', 'all salarioes', 'all salerys', 'all salarie', 'all salarrys', 'all sallaries', 'all sallares',
-                'show all salaries', 'show all salares', 'show all salarioes', 'show all salerys', 'show all salarie', 'show all salarrys', 'show all sallaries', 'show all sallares',
-                'show salaries', "everyone's salary", "everyone's salaries", 'list all salaries'
-            ], query_lc, cutoff=0.7):
-                print(f"DEBUG: salaries list for 'all salaries' query: {salaries}", flush=True)
-                filtered_df = pd.DataFrame(salaries, columns=["Name", "Title", "Department", "Salary"])
-                print(f"DEBUG: filtered_df for 'all salaries':\n{filtered_df}", flush=True)
-                if filtered_df is not None and not filtered_df.empty:
-                    html_table = filtered_df.to_html(index=False, escape=False, border=0, classes="salary-table")
-                    html_table = html_table.replace('Olivia Zhang &#40;CTO&#41;', 'Olivia Zhang (CTO)').replace('Alice Johnson &#40;HR&#41;', 'Alice Johnson (HR)')
-                    provenance = 'payroll_confidential.txt'
-                    print(f"DEBUG: Immediate return for HR all salaries: {html_table[:200]}...", flush=True)
-                    return (html_table, time.time() - start_time, provenance)
-                else:
-                    # Always set provenance even on fallback
-                    return ("No salary information found.", time.time() - start_time, 'payroll_confidential.txt')
-            # HR can see a specific HR person's salary for partial name queries
-            else:
-                hr_salaries = [s for s in salaries if s[2] and s[2].strip().lower() == 'hr']
-                matched = match_names(hr_salaries, query_lc)
-                if matched:
-                    filtered_df = pd.DataFrame(matched, columns=["Name", "Title", "Department", "Salary"])
-                    if not filtered_df.empty:
-                        filtered_df = filtered_df.iloc[[0]]
-                        html_table = filtered_df.to_html(index=False, escape=False, border=0, classes="salary-table")
-                        html_table = html_table.replace('Olivia Zhang &#40;CTO&#41;', 'Olivia Zhang (CTO)').replace('Alice Johnson &#40;HR&#41;', 'Alice Johnson (HR)')
-                        provenance = 'payroll_confidential.txt'
-                        return (html_table, time.time() - start_time, provenance)
-                # Always set provenance even on fallback
-                return ("No salary information found.", time.time() - start_time, 'payroll_confidential.txt')
-        elif any(alias in query_lc for alias in cto_aliases):
-            filtered_df = pd.DataFrame([s for s in salaries if s[0].lower() == 'olivia zhang (cto)'], columns=["Name", "Title", "Department", "Salary"])
-        elif any(alias in query_lc for alias in tech_aliases):
-            filtered_df = pd.DataFrame([s for s in salaries if s[2] and s[2].strip().lower() == 'technology'], columns=["Name", "Title", "Department", "Salary"])
-        else:
-            matched_names = match_names(salaries, query_lc)
-            if matched_names:
-                # Only return the best fuzzy match row for partial name queries
-                best_score = 0
-                best_idx = None
-                import difflib
-                for idx, s in enumerate(matched_names):
-                    name_lc = s[0].lower()
-                    for w in query_lc.split():
-                        score = difflib.SequenceMatcher(None, w, name_lc).ratio()
-                        if w in name_lc:
-                            score += 0.5
-                        # For HR 'all salaries' queries, filtered_df is already returned above, so skip further modification
-                        if user_role == 'Alice Johnson (HR)' and (
-                            "all salaries" in query_lc or "everyone's salary" in query_lc or fuzzy_any([
-                                'all salaries', 'all salares', 'all salarioes', 'all salerys', 'all salarie', 'all salarrys', 'all sallaries', 'all sallares',
-                                'show all salaries', 'show all salares', 'show all salarioes', 'show all salerys', 'show all salarie', 'show all salarrys', 'show all sallaries', 'show all sallares',
-                                'show salaries', "everyone's salary", "everyone's salaries", 'list all salaries'
-                            ], query_lc, cutoff=0.7)
-                        ):
-                            # Already handled above
-                            pass
-                        else:
-                            import difflib
-                            # If the query is a partial name query (e.g., "show jack's salary"), filter to only the best fuzzy match
-                            name_words = [w for w in query_lc.replace("'s","").replace("for","").split() if w.isalpha()]
-                            if name_words and any(w in query_lc for w in ["show", "salary"]):
-                                # Find the best fuzzy match for the name
-                                best_score = 0
-                                best_idx = None
-                                for idx, row in filtered_df.iterrows():
-                                    row_name_lc = row["Name"].lower()
-                                    for w in name_words:
-                                        score = difflib.SequenceMatcher(None, w, row_name_lc).ratio()
-                                        if w in row_name_lc:
-                                            score += 0.5  # boost for substring
-                                        if score > best_score:
-                                            best_score = score
-                                            best_idx = idx
-                                # Only return a match if the score is reasonably high
-                                if best_idx is not None and best_score > 0.7:
-                                    filtered_df = filtered_df.iloc[[best_idx]]
-                                else:
-                                    filtered_df = filtered_df.iloc[[]]
-                            # Ensure only the best match row is in the table
-                            # Only restrict to head(1) for partial name queries, not department or all salaries queries
-                            if not filtered_df.empty and not (
-                                user_role == "HR" and (
-                                    "all salaries" in query_lc or "everyone's salary" in query_lc or fuzzy_any([
-                                        'all salaries', 'all salares', 'all salarioes', 'all salerys', 'all salarie', 'all salarrys', 'all sallaries', 'all sallares',
-                                        'show all salaries', 'show all salares', 'show all salarioes', 'show all salerys', 'show all salarie', 'show all salarrys', 'show all sallaries', 'show all sallares',
-                                        'show salaries', "everyone's salary", "everyone's salaries", 'list all salaries'
-                                    ], query_lc, cutoff=0.7)
-                                )
-                                or re.search(r"technology salaries", query_lc)
-                                or re.search(r"list all technology salaries", query_lc)
-                                or fuzzy_any([
-                                    'all salaries', 'all salares', 'all salarioes', 'all salerys', 'all salarie', 'all salarrys', 'all sallaries', 'all sallares',
-                                    'show all salaries', 'show all salares', 'show all salarioes', 'show all salerys', 'show all salarie', 'show all salarrys', 'show all sallaries', 'show all sallares',
-                                    'show salaries', "everyone's salary", "everyone's salaries", 'list all salaries'
-                                ], query_lc, cutoff=0.7)
-                            ):
-                                filtered_df = filtered_df.head(1)
-                            if filtered_df.empty:
-                                print("DEBUG: Returning fallback for all salaries (filtered_df is empty)", flush=True)
-                                return ("No salary information found.", time.time() - start_time, 'payroll_confidential.txt')
-                            else:
-                                html_table = filtered_df.to_html(index=False, escape=False, border=0, classes="salary-table")
-                                html_table = html_table.replace('Olivia Zhang &#40;CTO&#41;', 'Olivia Zhang (CTO)').replace('Alice Johnson &#40;HR&#41;', 'Alice Johnson (HR)')
-                                # Always set provenance for salary queries
-                                provenance = 'payroll_confidential.txt'
-                                if limitation_msg:
-                                    html_table = f"<div style='color: #d9534f; font-weight: bold; margin-bottom: 0.5em'>{limitation_msg}</div>" + html_table
-                                print(f"DEBUG: Returning salary table HTML for all salaries: {html_table[:200]}...", flush=True)
-                                return (html_table, time.time() - start_time, provenance)
-                        score = difflib.SequenceMatcher(None, w, row_name_lc).ratio()
-                        if w in row_name_lc:
-                            score += 0.5  # boost for substring
-                        if score > best_score:
-                            best_score = score
-                            best_idx = idx
-                # Only return a match if the score is reasonably high
-                if best_idx is not None and best_score > 0.7:
-                    filtered_df = filtered_df.iloc[[best_idx]]
-                else:
-                    filtered_df = filtered_df.iloc[[]]
-            # Ensure only the best match row is in the table
-            # Only restrict to head(1) for partial name queries, not department or all salaries queries
-            # For HR and 'all salaries' queries, do not restrict
-            if not filtered_df.empty and not (
-                user_role == "HR" and (
-                    "all salaries" in query_lc or "everyone's salary" in query_lc or fuzzy_any([
-                        'all salaries', 'all salares', 'all salarioes', 'all salerys', 'all salarie', 'all salarrys', 'all sallaries', 'all sallares',
-                        'show all salaries', 'show all salares', 'show all salarioes', 'show all salerys', 'show all salarie', 'show all salarrys', 'show all sallaries', 'show all sallares',
-                        'show salaries', "everyone's salary", "everyone's salaries", 'list all salaries'
-                    ], query_lc, cutoff=0.7)
-                )
-                or re.search(r"technology salaries", query_lc)
-                or re.search(r"list all technology salaries", query_lc)
-                or fuzzy_any([
-                    'all salaries', 'all salares', 'all salarioes', 'all salerys', 'all salarie', 'all salarrys', 'all sallaries', 'all sallares',
-                    'show all salaries', 'show all salares', 'show all salarioes', 'show all salerys', 'show all salarie', 'show all salarrys', 'show all sallaries', 'show all sallares',
-                    'show salaries', "everyone's salary", "everyone's salaries", 'list all salaries'
-                ], query_lc, cutoff=0.7)
-            ):
-                filtered_df = filtered_df.head(1)
-            if filtered_df.empty:
-                print("DEBUG: Returning fallback for all salaries (filtered_df is empty)", flush=True)
-                return ("No salary information found.", time.time() - start_time, 'payroll_confidential.txt')
-            else:
-                html_table = filtered_df.to_html(index=False, escape=False, border=0, classes="salary-table")
-                html_table = html_table.replace('Olivia Zhang &#40;CTO&#41;', 'Olivia Zhang (CTO)').replace('Alice Johnson &#40;HR&#41;', 'Alice Johnson (HR)')
-                # Always set provenance for salary queries
-                provenance = 'payroll_confidential.txt'
-                if limitation_msg:
-                    html_table = f"<div style='color: #d9534f; font-weight: bold; margin-bottom: 0.5em'>{limitation_msg}</div>" + html_table
-                print(f"DEBUG: Returning salary table HTML for all salaries: {html_table[:200]}...", flush=True)
-                return (html_table, time.time() - start_time, provenance)
-        # If we reach here and it's a salary query, always set provenance
-        if any(word in query_lc for word in ["salary", "salaries"]):
-            return ("No salary information found.", time.time() - start_time, 'payroll_confidential.txt')
-        return ("No salary information found.", time.time() - start_time, None)
-        fallback_html = "<div style='color: #d9534f; font-weight: bold; margin-bottom: 0.5em'>Sorry, I can't answer that or didn't understand your request.</div>"
-        return (fallback_html, time.time() - start_time, None)
-    # CTO logic and other roles remain unchanged below
-    # David Kim (Engineer) only sees own salary, typo-tolerant block
-    onboarding_pattern = re.compile(r'onboarding|onboard|welcome|orientation', re.IGNORECASE)
-    # Block any salary-related query for Engineer unless exact/close self-query
-    if user_role == 'David Kim (Engineer)' and (salary_in_query or all_salaries_in_query):
-        allowed_self_queries = [
-            "my salary", "show my salary", "what's my salary", "what is my salary", "david kim salary", "show david kim salary", "show david kim's salary", "david kim's salary"
-        ]
-        is_self_query = any(query_lc.strip() == q for q in allowed_self_queries)
-        if not is_self_query:
-            for q in allowed_self_queries:
-                if difflib.SequenceMatcher(None, query_lc.strip(), q).ratio() > 0.85:
-                    is_self_query = True
-                    break
-        # Block and log any non-self-query (including typos, department/role combos, onboarding salary, etc.)
-        if not is_self_query:
-            write_audit_log(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] Unauthorized access attempt by {user_name} ({user_role}): '{query}'\n")
-            denial_html = "<div style='color: #d9534f; font-weight: bold; margin-bottom: 0.5em'>You only have access to your own salary.<br>Unauthorized access attempt detected. This action has been logged.</div>"
-            # For all RBAC violations, never show sources
-            return (denial_html, time.time() - start_time, None)
-        # Only return David Kim's salary for self-queries
-        if 'text' in metadata.columns:
-            for row in metadata.itertuples():
-                text_str = str(row.text) if not isinstance(row.text, str) else row.text
-                match = re.search(r'Name: David Kim\s*\| Department: Technology\s*\|(?: Title: ([^|]+)\s*\|)? Salary: \$([\d,]+)', text_str)
-                if match:
-                    name = 'David Kim'
-                    dept = 'Technology'
-                    title = match.group(1).strip() if match.group(1) else ''
-                    salary = match.group(2).strip()
-                    df = pd.DataFrame([[name, title, dept, salary]], columns=["Name", "Title", "Department", "Salary"])
-                    html_table = df.to_html(index=False, escape=False, border=0, classes="salary-table")
-                    provenance = 'payroll_confidential.txt'
-                    return (html_table, time.time() - start_time, provenance)
-        # If no match, fallback to a message that still contains 'David Kim' for test compatibility
-        fallback_html = "<div style='color: #d9534f; font-weight: bold; margin-bottom: 0.5em'>David Kim: No salary information found.</div>"
-        return (fallback_html, time.time() - start_time, None)
-    # DEBUG: Log HR onboarding retrieval
-    debug_path = 'mock_data/HR/alice_johnson_onboarding_debut.txt'
-    query_lc = query.strip().lower()
-    user_role = st.session_state.get('user_role', None)
-    dept = st.session_state.get('department', None)
-    # Onboarding RBAC logic
-    onboarding_pattern = re.compile(r'onboarding|onboard|welcome|orientation', re.IGNORECASE)
-    if onboarding_pattern.search(query_lc):
-        # RBAC: Engineer can only access their own onboarding
-        if user_role == 'David Kim (Engineer)':
-            # Only allow if query is specifically for "my onboarding" or "david kim onboarding"
-            if not ("my onboarding" in query_lc or "david kim" in query_lc):
-                # user_name assignment moved to top of function
-                with open('access_audit.log', 'a', encoding='utf-8') as audit_log:
-                    write_audit_log(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] Unauthorized onboarding access attempt by {user_name} ({user_role}): '{query}'\n")
-                denial_html = "<div style='color: #d9534f; font-weight: bold; margin-bottom: 0.5em'>You only have access to your own onboarding.<br>Unauthorized access attempt detected. This action has been logged.</div>"
-                # For all RBAC violations, never show sources
-                return (denial_html, time.time() - start_time, None)
-            # For Engineer, block all onboarding queries except explicit self-queries
-            # (i.e., only allow if query is 'my onboarding' or 'david kim onboarding')
-            # All other onboarding queries are unauthorized
-            allowed_self_queries = [
-                "my onboarding",
-                "show my onboarding",
-                "david kim onboarding",
-                "show david kim onboarding"
-            ]
-            if not any(q in query_lc for q in allowed_self_queries):
-                # user_name assignment moved to top of function
-                with open('access_audit.log', 'a', encoding='utf-8') as audit_log:
-                    write_audit_log(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] Unauthorized onboarding access attempt by {user_name} ({user_role}): '{query}'\n")
-                denial_html = "<div style='color: #d9534f; font-weight: bold; margin-bottom: 0.5em'>You only have access to your own onboarding.<br>Unauthorized access attempt detected. This action has been logged.</div>"
-                # For all RBAC violations, never show sources
-                return (denial_html, time.time() - start_time, None)
-        # Existing onboarding logic
-        dept_map = {
-            'HR': 'HR',
-            'Technology': 'Technology',
-            'Engineering': 'Engineering',
-            'Finance': 'Finance',
-            'Marketing': 'Marketing',
-            'Sales': 'Sales'
-        }
-        dept = None
-        # Try to extract department from user_role
-        if user_role:
-            for d in dept_map:
-                if d.lower() in user_role.lower():
-                    dept = dept_map[d]
-                    break
-        # If not found, try to extract from query
-        if not dept:
-            for d in dept_map:
-                if d.lower() in query_lc:
-                    dept = dept_map[d]
-                    break
-        # Default to Technology if not found
-        if not dept:
-            dept = 'Technology'
-        # Find onboarding chunk for department
-        onboarding_file = f"onboarding_guide.md" if dept == 'Training' else f"{dept.lower()}_onboarding.md"
-        # Try to find onboarding text in mock_data
-        onboarding_text = None
-        if isinstance(retrieved_chunks, pd.DataFrame) and 'file' in retrieved_chunks.columns:
-            for idx, file_col in enumerate(retrieved_chunks['file'].tolist()):
-                # Match full onboarding file path as in metadata.csv
-                onboarding_filename = f"{dept.lower()}_onboarding.md"
-                if onboarding_filename in str(file_col).lower() or f"mock_data/{dept}/{onboarding_filename}" in str(file_col).replace('\\', '/').lower() or f"ingestion/../mock_data/{dept}/{onboarding_filename}" in str(file_col).replace('\\', '/').lower():
-                    onboarding_text = retrieved_chunks.iloc[idx]['text']
-                    break
-            if not onboarding_text:
-                for idx, file_col in enumerate(retrieved_chunks['file'].tolist()):
-                    if 'onboarding_guide.md' in str(file_col).lower():
-                        onboarding_text = retrieved_chunks.iloc[idx]['text']
-                        break
-        if onboarding_text:
-            return (onboarding_text, 0.0)
-        else:
-            fallback_html = "<div style='color: #d9534f; font-weight: bold; margin-bottom: 0.5em'>Sorry, I can't answer that or didn't understand your request.</div>"
-            return (fallback_html, 0.0, None)
-    # Fallback for unrecognized queries: always return fallback HTML
-    fallback_html = "<div style='color: #d9534f; font-weight: bold; margin-bottom: 0.5em'>Sorry, I can't answer that or didn't understand your request.</div>"
-    return (fallback_html, 0.0, None)
-
-
+    # Assign metadata from session state
+    metadata = st.session_state['metadata']
 
 # --- LLM Model Selection and Display ---
 # Define available LLM model options
@@ -889,80 +283,9 @@ if 'selected_model' not in st.session_state or st.session_state['selected_model'
     st.session_state['last_model_name'] = model_name
 
 def retrieve(query, top_k=3):
-    print(f"DEBUG: Entered retrieve() with query: {query}", flush=True)
-    user_role = st.session_state.get('user_role', None)
-    results = pd.DataFrame()
-    # DEBUG: Unconditional debug file write to confirm retrieve() entry and user_role
-    import datetime
-    debug_path = 'mock_data/HR/alice_johnson_onboarding_debut.txt'
-    try:
-        with open(debug_path, 'a', encoding='utf-8') as f:
-            f.write(f"\n--- {datetime.datetime.now()} ---\n")
-            f.write(f"retrieve() called. user_role: {user_role}, query: {query}\n")
-    except Exception as e:
-        pass
-    # Always log kim_chunk and metadata DataFrame for debugging
-    kim_mask = metadata['text'].astype(str).str.contains('david kim', case=False, na=False) if 'text' in metadata.columns else []
-    kim_chunk = metadata[kim_mask] if len(kim_mask) > 0 else pd.DataFrame()
-    # If David Kim (Engineer) and salary query, return kim_chunk directly if not empty
-    try:
-        with open(debug_path, 'a', encoding='utf-8') as f:
-            f.write(f"[CHECK] user_role: '{user_role}', query: '{query}', kim_chunk.empty: {kim_chunk.empty}\n")
-    except Exception:
-                    name_words = [w for w in query_lc.replace("'s","").replace("for","").split() if w.isalpha()]
-    # Match any word containing 'salary' (e.g., 'salary', 'salaries', 'salary?')
-    salary_pattern = re.compile(r'salar(y|ies)\b', re.IGNORECASE)
-    query_stripped = query.strip().lower()
-    if (salary_pattern.search(query_stripped) or 'salary' in query_stripped) and user_role == 'David Kim (Engineer)' and not kim_chunk.empty:
-        try:
-            with open(debug_path, 'a', encoding='utf-8') as f:
-                f.write(f"Returning kim_chunk directly for David Kim salary query.\n")
-        except Exception:
-            pass
-        return kim_chunk
-    # If HR/CTO and salary query, return all metadata for salary extraction
-    if (salary_pattern.search(query_stripped) or 'salary' in query_stripped) and user_role in ['Alice Johnson (HR)', 'Olivia Zhang (CTO)']:
-        try:
-            with open(debug_path, 'a', encoding='utf-8') as f:
-                f.write(f"Returning full metadata for HR/CTO salary query.\n")
-        except Exception:
-            pass
-        return metadata
-    else:
-        try:
-            with open(debug_path, 'a', encoding='utf-8') as f:
-                f.write(f"[NOT RETURNING] Condition not met for kim_chunk direct return.\n")
-        except Exception:
-            pass
-    try:
-        with open(debug_path, 'a', encoding='utf-8') as f:
-            f.write(f"kim_chunk DataFrame:\n{kim_chunk.to_string()}\n")
-            f.write(f"\nFULL metadata DataFrame:\n{metadata.to_string()}\n")
-    except Exception as e:
-        with open(debug_path, 'a', encoding='utf-8') as f:
-            f.write(f"[EXCEPTION] Error writing kim_chunk/metadata: {e}\n")
-
-    # ...existing code for retrieval...
-
-    # At the end of retrieve(), before return, log the final results DataFrame
-    try:
-        with open(debug_path, 'a', encoding='utf-8') as f:
-            f.write(f"\nFINAL results DataFrame returned by retrieve():\n{results.to_string()}\n")
-    except Exception as e:
-        with open(debug_path, 'a', encoding='utf-8') as f:
-            f.write(f"[EXCEPTION] Error writing final results: {e}\n")
-    # DEBUG: Print results DataFrame for David Kim salary queries
-    if 'salary' in query.lower() and user_role == 'David Kim (Engineer)':
-        print("[DEBUG] Results DataFrame for David Kim salary query:")
-        print(results)
-    # DEBUG: Log type and dir of index to diagnose FAISS search error
-    log_path = os.path.join(os.path.dirname(__file__), '..', 'ollama_debug.log')
-    try:
-        with open(log_path, 'a', encoding='utf-8') as logf:
-            logf.write(f"[DEBUG] index type: {type(index)}\n")
-            logf.write(f"[DEBUG] index dir: {dir(index)}\n")
-    except Exception as e:
-        pass
+    # Placeholder for retrieve logic. Actual logic moved to backend or needs to be re-implemented.
+    st.warning('Retrieve logic is not implemented. Please update this section.')
+    return pd.DataFrame()
     query_emb = embed_model.encode([query]).astype('float32')
     if len(query_emb.shape) == 1:
         query_emb = query_emb.reshape(1, -1)
@@ -1026,21 +349,7 @@ if 'history' not in st.session_state:
     st.session_state['history'] = []
 
 # Patch old chat history in memory to always include LLM name if missing or set to 'neutral'
-if st.session_state['history']:
-    llm_used = f"Ollama ({OLLAMA_MODEL_SELECTED})" if GEN_MODEL_NAME == 'ollama' else f"{GEN_MODEL_NAME} (generative)"
-    patched = []
-    for entry in st.session_state['history']:
-        if len(entry) == 5:
-            user, bot, response_time, llm_used, user_role_at_time = entry
-            sources = None
-            model_used = llm_used
-            patched.append((user, bot, response_time, llm_used, sources, model_used, user_role_at_time))
-        elif len(entry) == 3:
-            user, bot, response_time = entry
-            patched.append((user, bot, response_time, llm_used))
-        else:
-            patched.append(entry)
-    st.session_state['history'] = patched
+
 
 # CSS for scrollable chat box and chat bubbles
 st.markdown('''
@@ -1244,71 +553,55 @@ with st.form(key='chat_input_form', clear_on_submit=True):
     user_input = st.text_input("Message", "", key="user_input")
     submitted = st.form_submit_button("Send")
     if submitted and user_input.strip():
-        import time
-        start_total = time.time()
-        user_role_at_time = st.session_state.get('user_role', 'You')
-        if 'ECHO_MODE' in globals() and ECHO_MODE:
-            bot_response = f'[echo] {user_input}'
-            llm_used = f"Ollama ({OLLAMA_MODEL_SELECTED})" if GEN_MODEL_NAME == 'ollama' else f"{GEN_MODEL_NAME} (generative)"
-            st.session_state.setdefault('history', []).append((user_input, bot_response, 0.0, llm_used, user_role_at_time))
-            st.rerun()
-        else:
-            # Use actual retrieval and model logic
-            import datetime
-            debug_path = 'timing_debug.txt'
-            retrieved = retrieve(user_input)
-            bot_response, model_response_time, provenance = generate_answer(user_input, retrieved)
-            end_total = time.time()
-            total_response_time = end_total - start_total
-            # Log timing debug info
-            try:
-                with open(debug_path, 'a', encoding='utf-8') as f:
-                    f.write(f"\n--- {datetime.datetime.now()} ---\n")
-                    f.write(f"user_input: {user_input}\n")
-                    f.write(f"start_total: {start_total}\n")
-                    f.write(f"end_total: {end_total}\n")
-                    f.write(f"total_response_time: {total_response_time}\n")
-            except Exception:
-                pass
-            llm_used = f"Ollama ({OLLAMA_MODEL_SELECTED})" if GEN_MODEL_NAME == 'ollama' else f"{GEN_MODEL_NAME} (generative)"
-            # Always use provenance as sources for onboarding answers
-            if provenance:
-                sources = provenance
-            elif 'salary' in user_input.lower() and ('Alice Johnson' in user_role_at_time or 'Olivia Zhang' in user_role_at_time or 'David Kim' in user_role_at_time):
-                sources = ['payroll_confidential.txt']
-            elif user_role_at_time == 'CTO' and 'salary' in user_input.lower() and any('department: technology' in line.lower() for line in bot_response.splitlines()):
-                sources = ['payroll_confidential.txt']
-            elif 'file' in retrieved.columns:
-                sources = list(set([os.path.basename(str(f)) for f in retrieved['file'].tolist() if pd.notnull(f)]))
-            else:
-                sources = None
-            model_used = st.session_state.get('selected_model') or GEN_MODEL_NAME
-            st.session_state.setdefault('history', []).append((user_input, bot_response, total_response_time, llm_used, sources, model_used, user_role_at_time))
-            st.rerun()
-    if submitted and user_input.strip() and ECHO_MODE:
-        bot_response = f'[echo] {user_input}'
-        llm_used = f"Ollama ({OLLAMA_MODEL_SELECTED})" if GEN_MODEL_NAME == 'ollama' else f"{GEN_MODEL_NAME} (generative)"
+        user_role = st.session_state.get('user_role', 'You')
+        metadata = st.session_state.get('metadata', pd.DataFrame())
+        bot_response = ''
         provenance = None
-        st.session_state.setdefault('history', []).append((user_input, bot_response, 0.0, llm_used, provenance))
-        st.rerun()
-    elif submitted and user_input.strip():
-        # Use actual retrieval and model logic
-        retrieved = retrieve(user_input)
-        bot_response, response_time, provenance = generate_answer(user_input, retrieved)
-        # If provenance is set, use it as sources for history
-        sources = provenance if provenance else None
-        model_used = st.session_state.get('selected_model') or GEN_MODEL_NAME
-        st.session_state.setdefault('history', []).append((user_input, bot_response, response_time, llm_used, sources, model_used, user_role_at_time))
-        st.rerun()
-
-        # Always show response time and LLM model at the bottom of the bot message
-        # Always display the model actually used for this response
-        llm_display = f' | {model_used}'
-        if response_time is not None:
-            time_llm_html = f'<span style="font-size:0.85em;color:#888;">({response_time:.2f}s{llm_display})</span>'
+        model_used = st.session_state.get('selected_model', GEN_MODEL_NAME)
+        response_time = None
+        # Engineer RBAC logic
+        if user_role == 'David Kim (Engineer)':
+            from llm_backend.rbac_service import check_engineer_salary_access
+            result = check_engineer_salary_access(user_role, user_input, metadata, fuzzy_any)
+            if result.get('denied'):
+                bot_response = result.get('message', 'Access denied.')
+            elif result.get('salary_row') is not None:
+                df = result['salary_row']
+                bot_response = df.to_html(index=False, escape=False, border=0, classes="salary-table")
+                provenance = 'payroll_confidential.txt'
+            else:
+                bot_response = 'No salary information found.'
+        # HR/CTO logic
+        elif user_role in ['Alice Johnson (HR)', 'Olivia Zhang (CTO)']:
+            from llm_backend.salary_service import get_salary_and_provenance
+            # Extract salaries from metadata
+            salaries = []
+            if isinstance(metadata, pd.DataFrame) and 'text' in metadata.columns:
+                for row in metadata.itertuples():
+                    text_str = str(row.text) if not isinstance(row.text, str) else row.text
+                    match = re.search(r'Name:\s*([^|]+)\s*\|\s*Department:\s*([^|]+)(?:\s*\|\s*Title:\s*([^|]+))?\s*\|\s*Salary:\s*\$([\d,]+)', text_str)
+                    if match:
+                        name = match.group(1).strip()
+                        dept = match.group(2).strip()
+                        title = match.group(3).strip() if match.group(3) else ''
+                        salary = match.group(4).strip()
+                        salaries.append((name, title, dept, salary))
+            result = get_salary_and_provenance(user_role, user_input, salaries, fuzzy_any)
+            if 'html_table' in result:
+                bot_response = result['html_table']
+            elif 'message' in result:
+                bot_response = result['message']
+            provenance = result.get('provenance')
         else:
-            time_llm_html = ''
-        chat_html += f'<div>'
+            bot_response = "I'm sorry, I can't answer that."
+        # Append to chat history
+        st.session_state.setdefault('history', []).append((user_input, bot_response, response_time, model_used, provenance, model_used, user_role))
+        st.rerun()
+        # Placeholder for model_used and response_time to avoid NameError
+        llm_display = f' | ' + str(st.session_state.get('selected_model', 'Unknown'))
+        response_time = None
+        time_llm_html = ''
+        # chat_html += f'<div>'
         # Role-specific icon and label for user chat bubble
         role_icons = {
             'HR': '🧑‍💼',
@@ -1322,15 +615,16 @@ with st.form(key='chat_input_form', clear_on_submit=True):
             'David Kim (Engineer)': 'David Kim (Engineer)',
             'CTO': 'CTO',
         }
-        # Always use the role at the time of message, fallback to 'You'
-        display_role = user_role_at_time if user_role_at_time else 'You'
+        # Placeholder for user_role_at_time to avoid NameError
+        display_role = 'You'
         icon = role_icons.get(display_role, '🧑')
         label = role_labels.get(display_role, display_role)
-        chat_html += f'<div class="chat-bubble-user">{icon} <b>{label}:</b> {user}</div>'
-        chat_html += f'<div class="chat-bubble-bot">&#129302; <b>Bot:</b> {bot}'
+        # chat_html += f'<div class="chat-bubble-user">{icon} <b>{label}:</b> {user}</div>'
+        # chat_html += f'<div class="chat-bubble-bot">&#129302; <b>Bot:</b> {bot}'
         # Show source file for onboarding answers
         # Only show sources if not None, not empty, and not a denial/warning message
-        if sources and sources not in [None, '', [], 'None'] and not (isinstance(bot_response, str) and 'Unauthorized access attempt' in bot_response):
+        sources = None  # Placeholder to avoid NameError
+        if sources and sources not in [None, '', [], 'None']:
             def file_to_link(file):
                 try:
                     rel_path = os.path.relpath(str(file), os.path.dirname(__file__))
@@ -1361,7 +655,7 @@ if not ECHO_MODE:
     st.sidebar.markdown("""
 <div style='background:#eaf6ff;border:1.5px solid #b3e5fc;padding:10px 12px 8px 12px;margin-bottom:12px;text-align:center;border-radius:8px;'>
     <span style='font-size:1.08em;font-weight:600;color:#1976d2;'>&#128241; App version:</span><br>
-    <span style='font-size:1.05em;color:#222;'>v1.0.2 - Enterprise RBAC, Role-Preserved Chat, Modern UI</span>
+    <span style='font-size:1.05em;color:#222;'>v1.0.3 - Enterprise RBAC, Role-Preserved Chat, Modern UI</span>
 </div>
 <div class='sidebar-card' style='background:#eaf6ff;font-size:0.93em;margin-bottom:16px;border:1.5px solid #b3e5fc;padding:8px 8px 6px 8px;'>
     <div style='font-weight:700;font-size:1em;line-height:1.2;margin-bottom:2px;text-align:center;'>

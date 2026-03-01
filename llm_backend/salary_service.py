@@ -1,3 +1,72 @@
+import difflib
+import pandas as pd
+import re
+import time
+
+def match_departments(salaries, query_lc):
+    results = []
+    for s in salaries:
+        dept_lc = s[2].lower()
+        if dept_lc in query_lc or any(dept_part in query_lc for dept_part in dept_lc.split()):
+            results.append(s)
+        else:
+            for part in query_lc.split():
+                if difflib.SequenceMatcher(None, part, dept_lc).ratio() > 0.7:
+                    results.append(s)
+                    break
+    return results
+    cto_aliases = ["cto", "chief technology officer", "olivia zhang"]
+    tech_aliases = ["tech", "technology", "engineer", "engineering"]
+    all_salaries_targets = [
+        'all salaries', 'all salares', 'all salarioes', 'all salerys', 'all salarie', 'all salarrys', 'all sallaries', 'all sallares',
+        'show all salaries', 'show all salares', 'show all salarioes', 'show all salerys', 'show all salarie', 'show all salarrys', 'show all sallaries', 'show all sallares',
+        'show salaries', 'everyone\'s salary', 'everyone\'s salaries', 'list all salaries'
+    ]
+    all_salaries_in_query = any(re.search(pat, query_lc) for pat in [r"all salaries", r"show all salaries", r"show salaries", r"everyone's salary", r"everyone's salaries", r"list all salaries"]) or fuzzy_any(all_salaries_targets, query_lc, cutoff=0.7)
+    if user_role == 'Olivia Zhang (CTO)':
+        if (re.search(r'all salaries', query_lc) or all_salaries_in_query or re.search(r'technology salaries', query_lc) or re.search(r'list all technology salaries', query_lc)):
+            limitation_msg = "You only have access to Technology department salaries."
+            tech_salaries = [s for s in salaries if s[2].lower() == 'technology']
+            filtered_df = pd.DataFrame(tech_salaries, columns=["Name", "Title", "Department", "Salary"])
+            html_table = filtered_df.to_html(index=False, escape=False, border=0, classes="salary-table") if not filtered_df.empty else "<div style='color: #d9534f; font-weight: bold; margin-bottom: 0.5em'>No Technology salaries found.</div>"
+            html_table = f"<div style='color: #d9534f; font-weight: bold; margin-bottom: 0.5em'>{limitation_msg}</div>" + html_table
+            return (html_table, time.time() - start_time, 'payroll_confidential.txt')
+        else:
+            tech_salaries = [s for s in salaries if s[2].lower() == 'technology']
+            matched = match_names(tech_salaries, query_lc)
+            if matched:
+                filtered_df = pd.DataFrame([matched[0]], columns=["Name", "Title", "Department", "Salary"])
+                html_table = filtered_df.to_html(index=False, escape=False, border=0, classes="salary-table")
+                return (html_table, time.time() - start_time, 'payroll_confidential.txt')
+            else:
+                return ("No Technology salaries found.", time.time() - start_time, 'payroll_confidential.txt')
+    elif user_role == 'Alice Johnson (HR)':
+        if re.search(r"technology salaries", query_lc) or re.search(r"list all technology salaries", query_lc):
+            tech_salaries = [s for s in salaries if s[2] and s[2].strip().lower() == 'technology']
+            filtered_df = pd.DataFrame(tech_salaries, columns=["Name", "Title", "Department", "Salary"])
+        if any(alias in query_lc for alias in ["cto", "chief technology officer", "olivia zhang"]):
+            cto_candidates = []
+            for s in salaries:
+                name_lc = s[0].strip().lower()
+                title_lc = (s[1] or '').strip().lower()
+                if 'olivia zhang' in name_lc or 'cto' in name_lc or 'cto' in title_lc:
+                    cto_candidates.append(s)
+            cto_row = None
+            for s in cto_candidates:
+                if 'olivia zhang' in s[0].strip().lower() and 'cto' in (s[1] or '').strip().lower():
+                    cto_row = s
+                    break
+            if not cto_row and cto_candidates:
+                cto_row = cto_candidates[0]
+            provenance = 'payroll_confidential.txt'
+            if cto_row:
+                filtered_df = pd.DataFrame([cto_row], columns=["Name", "Title", "Department", "Salary"])
+                html_table = filtered_df.to_html(index=False, escape=False, border=0, classes="salary-table")
+                html_table = html_table.replace('Olivia Zhang &#40;CTO&#41;', 'Olivia Zhang (CTO)').replace('Alice Johnson &#40;HR&#41;', 'Alice Johnson (HR)')
+                return (html_table, time.time() - start_time, provenance)
+            else:
+                return ("No salary information found.", time.time() - start_time, provenance)
+    # ...existing code...
 """
 HR/CTO salary and provenance logic for the chatbot.
 Extracted from ui/app.py for testability and maintainability.
