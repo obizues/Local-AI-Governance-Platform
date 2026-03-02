@@ -2,7 +2,7 @@
 
 ```mermaid
 flowchart TD
-    UserInput["User Input (UI)"] --> ChatWindow["Chat Window (Streamlit)"]
+    UserInput --> ChatWindow["Chat Window (Streamlit)"]
     ChatWindow --> RBAC["RBAC & Routing (query_router.py)"]
     RBAC --> Audit["Audit Logging"]
     RBAC --> LLMBackend["LLM Backend"]
@@ -24,20 +24,20 @@ flowchart TD
 ```mermaid
 flowchart TD
     subgraph UI
-        A1[User Input]
-        A2[Chat Window (Streamlit)]
-        A3[Role Selection]
+        A1(User Input)
+        A2(Chat Window (Streamlit))
+        A3(Role Selection)
     end
     subgraph Backend
-        B1[RBAC & Routing (query_router.py)]
-        B2[LLM Backend]
-        B3[RAG Pipeline]
-        B4[Audit Logging]
+        B1(RBAC & Routing (query_router.py))
+        B2(LLM Backend)
+        B3(RAG Pipeline)
+        B4(Audit Logging)
     end
     subgraph Data
-        D1[vector_db/metadata.csv, .index]
-        D2[mock_data/]
-        D3[ingestion/]
+        D1(vector_db/metadata.csv, .index)
+        D2(mock_data/)
+        D3(ingestion/)
     end
     A1 --> A2
     A2 --> A3
