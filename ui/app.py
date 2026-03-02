@@ -15,7 +15,7 @@ def load_query_logs():
             reader = csv.DictReader(f)
             return list(reader)
     else:
-        st.info("No logs to display.")
+        return []
 
 def append_query_log(log_entry):
     file_exists = os.path.exists(LOG_CSV_PATH)
