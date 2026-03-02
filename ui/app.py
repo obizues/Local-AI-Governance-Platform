@@ -561,13 +561,7 @@ with st.expander("Query Logs (Audit)", expanded=False):
         if not logs_df.empty:
             # Convert all columns to string to avoid Arrow LargeUtf8 errors
             logs_df = logs_df.astype(str)
-            def highlight_denials(row):
-                color = 'background-color: #ffcccc;' if is_denial_true(row) else ''
-                return [color]*len(row)
-            st.dataframe(
-                logs_df.style.apply(highlight_denials, axis=1),
-                height=250
-            )
+            st.dataframe(logs_df, height=250)
         else:
             st.info("No logs to display.")
     else:
@@ -694,7 +688,7 @@ Technology executives, engineering leaders, HR professionals, AI/ML practitioner
 - Technical leadership and system design for enterprise AI
 - **Persistent, filterable audit logs for all queries and denials**
 """, unsafe_allow_html=True)
-with st.sidebar.expander("&#128193; Project Documentation", expanded=False):
+with st.sidebar.expander("📄 Project Documentation", expanded=False):
     st.markdown("**Project Documentation**")
     st.markdown("[GitHub Repository](https://github.com/obizues/Local-AI-Chatbot-POC)")
     st.markdown("**Documentation**")
@@ -702,7 +696,7 @@ with st.sidebar.expander("&#128193; Project Documentation", expanded=False):
     st.markdown("- [ARCHITECTURE.md](https://github.com/obizues/Local-AI-Chatbot-POC/blob/main/ARCHITECTURE.md): Deep technical documentation and diagrams")
     st.markdown("- System Diagrams: Mermaid diagrams for flow, components, and RAG")
     st.markdown("**Key Sections:**\n- RBAC & Audit Logging\n- RAG & Semantic Search\n- LLM integration strategy\n- Production deployment guide\n- Architectural decision records")
-with st.sidebar.expander("&#128295; Tech Stack", expanded=False):
+with st.sidebar.expander("🧰 Tech Stack", expanded=False):
     st.markdown("""
 <span style='font-size:1em;'>
 <ul style='margin-bottom:0; padding-left: 18px;'>
