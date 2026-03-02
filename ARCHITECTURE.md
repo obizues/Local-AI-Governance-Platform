@@ -2,7 +2,7 @@
 
 ```mermaid
 flowchart TD
-    UserInput["User Input (UI)"] --> ChatWindow[Chat Window (Streamlit)]
+    UserInput[User Input (UI)] --> ChatWindow[Chat Window (Streamlit)]
     ChatWindow --> RBAC[RBAC & Routing (query_router.py)]
     RBAC --> Audit[Audit Logging]
     RBAC --> LLMBackend[LLM Backend]
@@ -20,122 +20,36 @@ flowchart TD
     Ingest --> MockDocs
     LLMBackend --> MockDocs
 ```
-UserInput[User Input (UI)] --> ChatWindow[Chat Window (Streamlit)]
-ChatWindow --> RBAC[RBAC & Routing (query_router.py)]
-RBAC --> Audit[Audit Logging]
-RBAC --> LLMBackend[LLM Backend]
-LLMBackend --> Retrieval[Semantic Retrieval (FAISS + SentenceTransformers)]
-Retrieval --> LLMBackend
-LLMBackend --> ChatWindow
-subgraph Data
-VectorDB[vector_db/metadata.csv, .index]
-MockDocs[mock_data/]
-Ingest[ingestion/]
-end
-Retrieval --> VectorDB
-Retrieval --> MockDocs
-Ingest --> VectorDB
-Ingest --> MockDocs
-LLMBackend --> MockDocs
+
+```mermaid
+flowchart TD
+    subgraph UI
+        A1[User Input]
+        A2[Chat Window (Streamlit)]
+        A3[Role Selection]
+    end
+    subgraph Backend
+        B1[RBAC & Routing (query_router.py)]
+        B2[LLM Backend]
+        B3[RAG Pipeline]
+        B4[Audit Logging]
+    end
+    subgraph Data
+        D1[vector_db/metadata.csv, .index]
+        D2[mock_data/]
+        D3[ingestion/]
+    end
+    A1 --> A2
+    A2 --> A3
+    A2 --> B1
+    A3 --> B1
+    B1 --> B4
+    B1 --> B2
+    B2 --> B3
+    B3 --> D1
+    B3 --> D2
+    D3 --> D1
 ```
-            MockDocs[mock_data/]
-            Ingest[ingestion/]
-        end
-        Retrieval --> VectorDB
-        Retrieval --> MockDocs
-        Ingest --> VectorDB
-        Ingest --> MockDocs
-        LLMBackend --> MockDocs
-    ```
-            B2[LLM Backend]
-            B3[RAG Pipeline]
-            B4[Audit Logging]
-        end
-        subgraph Data
-            D1[vector_db/metadata.csv, .index]
-            D2[mock_data/]
-            D3[ingestion/]
-        end
-        ```mermaid
-        flowchart TD
-            subgraph UI
-                A1[User Input]
-                A2[Chat Window (Streamlit)]
-                A3[Role Selection]
-            end
-            subgraph Backend
-                B1[RBAC & Routing (query_router.py)]
-                B2[LLM Backend]
-                B3[RAG Pipeline]
-                B4[Audit Logging]
-            end
-            subgraph Data
-                D1[vector_db/metadata.csv, .index]
-                D2[mock_data/]
-                D3[ingestion/]
-            end
-            A1 --> A2
-            A2 --> A3
-            A2 --> B1
-            A3 --> B1
-            B1 --> B4
-            B1 --> B2
-            B2 --> B3
-            B3 --> D1
-            B3 --> D2
-            D3 --> D1
-```
-            subgraph UI
-                A1[User Input]
-                A2[Chat Window (Streamlit)]
-                A3[Role Selection]
-            end
-            subgraph Backend
-                B1[RBAC & Routing (query_router.py)]
-                B2[LLM Backend]
-                B3[RAG Pipeline]
-                B4[Audit Logging]
-            end
-            subgraph Data
-                D1[vector_db/metadata.csv, .index]
-                D2[mock_data/]
-                D3[ingestion/]
-            end
-            A1 --> A2
-            A2 --> A3
-            A2 --> B1
-            A3 --> B1
-            B1 --> B4
-            B1 --> B2
-            B2 --> B3
-            B3 --> D1
-            B3 --> D2
-            D3 --> D1
-        ```
-                end
-                subgraph Data
-                    D1[vector_db/metadata.csv]
-                    D2[mock_data/]
-                    D3[ingestion/]
-                end
-                A1 --> A2
-                A2 --> A3
-                A2 --> B1
-                A3 --> B1
-                B1 --> B4
-                B1 --> B2
-                B1 --> A2
-                B2 --> B3
-                B3 --> D1
-                B3 --> D2
-                D3 --> D1
-            ```
-        B3 -->|Retrieve| D2
-        D3 --> D1
-        D3 --> D2
-        B2 -->|Answer| A2
-        B2 -->|Onboarding/SOP/Salary| D2
-        A2 -->|Feedback| B4
 
 **Major Features:**
 - Enterprise-grade, typo-tolerant RBAC for all salary and sensitive queries
