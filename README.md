@@ -1,17 +1,33 @@
 
 ## 🖼️ System Diagram
 
-> **Version:** v0.9.0 — February 22, 2026
-- **Version:** v0.10.0 — February 23, 2026
-
+> **Version:** v1.0.4 — March 2, 2026
 
 ```mermaid
-graph TD
-   UserInput[User Input] --> ChatWindow[Chat Window]
-   ChatWindow --> LLMBackend[LLM Backend]
-   LLMBackend --> Retrieval[Retrieval]
-   Retrieval --> DataStore[Document/Data Store]
-   LLMBackend --> ChatWindow
+flowchart TD
+   UserInput[User Input (UI)] -->|Typed Query| ChatWindow[Chat Window (Streamlit)]
+   ChatWindow -->|Route Query| RBAC[RBAC & Routing (query_router.py)]
+   RBAC -->|Access Check| Audit[Audit Logging]
+   RBAC -->|Allowed| LLMBackend[LLM Backend]
+   LLMBackend -->|RAG Pipeline| Retrieval[Semantic Retrieval (FAISS + SentenceTransformers)]
+   Retrieval -->|Relevant Chunks| LLMBackend
+   LLMBackend -->|Answer| ChatWindow
+   RBAC -->|Denied| ChatWindow
+   ChatWindow -->|Feedback| Audit
+   subgraph Data
+      VectorDB[vector_db/metadata.csv, .index]
+      MockDocs[mock_data/]
+      Ingest[ingestion/]
+   end
+   Retrieval --> VectorDB
+   Retrieval --> MockDocs
+   Ingest --> VectorDB
+   Ingest --> MockDocs
+   LLMBackend -->|Onboarding, SOP, Salary| MockDocs
+   ChatWindow -->|Role Selection| RBAC
+   RBAC -->|Salary/Onboarding/SOP| LLMBackend
+   LLMBackend -->|Salary Table| ChatWindow
+   LLMBackend -->|Onboarding/SOP| ChatWindow
 ```
 
 # 🤖 Local AI Chatbot POC
@@ -29,7 +45,7 @@ A hands-on AI project for private, local document Q&A and semantic search, featu
 - Robust feedback logging and evaluation
 
 **Target Audience:**
-Technology executives, engineering leaders, HR professionals, AI/ML practitioners, and technical decision-makers interested in secure document Q&A, RBAC enforcement, and advanced LLM-driven systems for enterprise use cases.
+Technology executives, technology leaders, HR professionals, AI/ML practitioners, and technical decision-makers interested in secure document Q&A, RBAC enforcement, and advanced LLM-driven systems for enterprise use cases.
 
 **What This Demonstrates:**
 - Deep LLM integration (Ollama, HuggingFace Transformers)
@@ -67,17 +83,17 @@ Technology executives, engineering leaders, HR professionals, AI/ML practitioner
    (The new modern chat UI is integrated directly in ui/app.py. No need to use basic_chat.py. The `my_chat_component` folder has been removed as of v0.6.0.)
 
 
-## 🚀 Features (v0.11.0)
-- **Enterprise-Grade RBAC:** Strict, typo-tolerant role-based access control for all salary and sensitive queries. HR sees all, CTO sees only Technology, David Kim (Engineer) sees only his own salary. All denials and fallbacks use a unified, branded HTML message.
+
+## 🚀 Features (v1.0.4)
+- **Enterprise-Grade RBAC:** Strict, typo-tolerant role-based access control for all salary and sensitive queries. HR sees all, CTO sees only Technology, David Kim (Engineer) sees only his own salary. All denials and fallbacks use a unified, branded HTML message. All RBAC, fallback, and audit logic is fully tested (pytest).
 - **Modern, Unified Chat UI:** Fully integrated Streamlit chat interface with persistent role/model display, right-aligned chat bubbles, and mobile-friendly design. Sidebar includes About, Docs, Tech Stack, System Design, and App Version.
 - **Role-Preserved Chat History:** Every message stores and displays the user's role at the time of sending, even if the role changes later.
 - **Advanced Semantic Search:** Real-time retrieval over internal documents (PDF, DOCX, TXT) using FAISS and SentenceTransformers. Supports both local (Ollama) and HuggingFace LLMs.
 - **Production-Ready Logging:** Robust audit logging for all unauthorized access attempts, CSV logging of all interactions, semantic similarity and response time metrics, and feedback voting for continuous improvement.
 - **Modular, Extensible Codebase:** Clean, well-documented Python/Streamlit architecture, ready for enterprise extension and deployment. Reproducible environments and secure secrets/configuration management.
 - **Technical Leadership:** Demonstrates advanced system design, RBAC enforcement, and LLM integration for secure enterprise AI. Inspired by best practices from agentic-mortgage-research.
-- **Brag-worthy:** All RBAC, fallback, and audit logic is fully tested (pytest), typo-tolerant, and robust to edge cases. Modern UI/UX, role-preserved chat, and seamless LLM/model switching.
-- Modular, extensible Python codebase
-- Devcontainer and GitHub Actions for reproducible development
+- **AI Search & Knowledge System:** RAG pipeline, semantic retrieval, and provenance/source display for all answers.
+- **Brag-worthy:** Modern UI/UX, role-preserved chat, and seamless LLM/model switching. Devcontainer and GitHub Actions for reproducible development.
 - Improvements tracker in sidebar
 
 

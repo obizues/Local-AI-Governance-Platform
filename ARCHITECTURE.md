@@ -1,5 +1,68 @@
+# System Architecture & Flow
 
+```mermaid
+flowchart TD
+    UserInput[User Input (UI)] -->|Typed Query| ChatWindow[Chat Window (Streamlit)]
+    ChatWindow -->|Route Query| RBAC[RBAC & Routing (query_router.py)]
+    RBAC -->|Access Check| Audit[Audit Logging]
+    RBAC -->|Allowed| LLMBackend[LLM Backend]
+    LLMBackend -->|RAG Pipeline| Retrieval[Semantic Retrieval (FAISS + SentenceTransformers)]
+    Retrieval -->|Relevant Chunks| LLMBackend
+    LLMBackend -->|Answer| ChatWindow
+    RBAC -->|Denied| ChatWindow
+    ChatWindow -->|Feedback| Audit
+    subgraph Data
+        VectorDB[vector_db/metadata.csv, .index]
+        MockDocs[mock_data/]
+        Ingest[ingestion/]
+    end
+    Retrieval --> VectorDB
+    Retrieval --> MockDocs
+    Ingest --> VectorDB
+    Ingest --> MockDocs
+    LLMBackend -->|Onboarding, SOP, Salary| MockDocs
+    ChatWindow -->|Role Selection| RBAC
+    RBAC -->|Salary/Onboarding/SOP| LLMBackend
+    LLMBackend -->|Salary Table| ChatWindow
+    LLMBackend -->|Onboarding/SOP| ChatWindow
+```
 
+# Component-Level System Diagram
+
+```mermaid
+flowchart TD
+    subgraph UI
+        A1[User Input]
+        A2[Chat Window (Streamlit)]
+        A3[Role Selection]
+    end
+    subgraph Backend
+        B1[RBAC & Routing (query_router.py)]
+        B2[LLM Backend]
+        B3[RAG Pipeline]
+        B4[Audit Logging]
+    end
+    subgraph Data
+        D1[vector_db/metadata.csv, .index]
+        D2[mock_data/]
+        D3[ingestion/]
+    end
+    A1 --> A2
+    A2 --> A3
+    A2 -->|Query| B1
+    A3 -->|Role| B1
+    B1 -->|Access Check| B4
+    B1 -->|Allowed| B2
+    B1 -->|Denied| A2
+    B2 -->|RAG| B3
+    B3 -->|Retrieve| D1
+    B3 -->|Retrieve| D2
+    D3 --> D1
+    D3 --> D2
+    B2 -->|Answer| A2
+    B2 -->|Onboarding/SOP/Salary| D2
+    A2 -->|Feedback| B4
+```
 
 
 # Local AI Chatbot POC - Architecture (v1.0.4)
@@ -15,15 +78,38 @@ This document describes the architecture, components, and deployment strategies 
 - **llm_backend/**: Business logic, LLM service, RAG pipeline, RBAC service, and data utilities.
 - **ingestion/**: Scripts for document ingestion, chunking, and embedding.
 - **vector_db/**: Stores metadata and vector index for document retrieval.
-- **mock_data/**: Sample HR, Engineering, and Training documents.
+- **mock_data/**: Sample HR, Technology, and Training documents.
 - **tests/**: Unit and integration tests for chatbot logic and RBAC.
 
-## Data Flow
-1. User interacts with Streamlit UI (ui/app.py).
-2. Query is processed, RBAC checked, and routed to LLM backend.
-3. Relevant documents are retrieved from vector_db and mock_data.
-4. LLM backend generates answer, possibly using RAG pipeline.
-5. Results (e.g., salary tables, onboarding steps) are rendered in the UI.
+
+## Data & Service Flow
+1. User interacts with Streamlit UI (`ui/app.py`).
+2. Query is routed to `query_router.py` for RBAC and intent detection.
+3. If allowed, query is passed to LLM backend and RAG pipeline for semantic search (FAISS + SentenceTransformers).
+4. Relevant document chunks are retrieved from `vector_db` and `mock_data`.
+5. LLM backend generates answer (salary table, onboarding, SOP, etc.).
+6. Results are rendered in the UI, with provenance/source links.
+7. All access denials and feedback are logged via robust audit logging.
+
+## Key Methods & Services
+- **ui/app.py**: Streamlit UI, role selection, chat, feedback, and provenance display.
+- **llm_backend/query_router.py**: Central RBAC, routing, audit logging, and intent detection.
+- **llm_backend/model_service.py**: LLM pipeline, embedding, and retrieval orchestration.
+- **llm_backend/rag_pipeline.py**: RAG orchestration, chunk retrieval, and semantic search.
+- **llm_backend/salary_access.py**: Minimal salary access logic (HR, CTO, self-only).
+- **vector_db/**: FAISS index and metadata for semantic retrieval.
+- **mock_data/**: HR, Technology, and Training sample docs.
+- **ingestion/**: Scripts for chunking and embedding documents.
+- **tests/**: Full pytest coverage for RBAC, audit, onboarding, and salary logic.
+
+## AI Search & Knowledge System
+- **Semantic Search:** FAISS + SentenceTransformers for fast, typo-tolerant retrieval.
+- **RAG Pipeline:** Combines retrieved chunks with LLM context for robust answers.
+- **LLM Integration:** HuggingFace Transformers and local Ollama support.
+- **RBAC:** Strict, typo-tolerant access control for salary, onboarding, and SOP queries.
+- **Audit Logging:** All denials and sensitive access attempts are logged for compliance.
+
+---
 
 ## Known Issues
 - Some business logic remains in the UI layer (to be refactored).

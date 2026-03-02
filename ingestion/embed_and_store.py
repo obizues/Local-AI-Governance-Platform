@@ -23,13 +23,13 @@ for fname, dept, sens in onboarding_files:
 		# Optionally set version
 		df.loc[idx, 'version'] = 1.0
 
-payroll_idx = df['file'].astype(str).str.contains('payroll_confidential.txt', case=False, na=False)
+payroll_idx = df['file'].astype(str).str.contains('mock_data/HR/payroll_confidential.txt', case=False, na=False)
 if payroll_idx.any():
 	payroll_row = df[payroll_idx].iloc[0]
 	payroll_text = payroll_row['text']
 	# If the chunked text is missing salary lines, read the file directly
 	if not isinstance(payroll_text, str) or 'Name:' not in payroll_text:
-		payroll_file_path = os.path.join(os.path.dirname(__file__), 'payroll_confidential.txt')
+		payroll_file_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '../mock_data/HR/payroll_confidential.txt'))
 		if os.path.exists(payroll_file_path):
 			with open(payroll_file_path, 'r', encoding='utf-8') as f:
 				payroll_text = f.read()
@@ -52,7 +52,7 @@ if payroll_idx.any():
 	# Remove the original payroll row and add the new ones
 	df = df[~payroll_idx]
 	df = pd.concat([df, pd.DataFrame(payroll_rows)], ignore_index=True)
-	payroll_debug = df[df['file'].astype(str).str.contains('payroll_confidential.txt', case=False, na=False)][['file','text']]
+	payroll_debug = df[df['file'].astype(str).str.contains('mock_data/HR/payroll_confidential.txt', case=False, na=False)][['file','text']]
 	print('DEBUG: payroll_confidential.txt rows after split:')
 	print(payroll_debug.to_string(index=False))
 

@@ -8,9 +8,20 @@ import pandas as pd
 import faiss
 import re
 import time
-print("DEBUG: Starting import of sentence_transformers and transformers", flush=True)
-from sentence_transformers import SentenceTransformer
-from transformers import pipeline
+ # print("DEBUG: Starting import of sentence_transformers and transformers", flush=True)
+
+import streamlit as st
+
+# Use Streamlit cache for expensive imports
+@st.cache_resource(show_spinner=False)
+def get_sentence_transformer():
+    from sentence_transformers import SentenceTransformer
+    return SentenceTransformer('all-MiniLM-L6-v2')
+
+@st.cache_resource(show_spinner=False)
+def get_transformers_pipeline(model_name):
+    from transformers import pipeline
+    return pipeline('text-generation', model=model_name)
 print("DEBUG: Finished import of sentence_transformers and transformers", flush=True)
 
 
@@ -152,12 +163,12 @@ st.markdown(app_title_banner, unsafe_allow_html=True)
 # --- RBAC: Role selection ---
 
 ROLES = [
-    "Alice Johnson (HR)",
+    "Alice Johnson (CPO)",
     "David Kim (Engineer)",
     "Olivia Zhang (CTO)",
 ]
 ROLE_DESCRIPTIONS = {
-    "Alice Johnson (HR)": "Access to confidential HR details (e.g., pay, benefits)",
+    "Alice Johnson (CPO)": "Access to confidential HR details (e.g., pay, benefits)",
     "David Kim (Engineer)": "Access to David Kim's engineering SOPs and salary only",
     "Olivia Zhang (CTO)": "Full access to all Technology department data and documents"
 }
@@ -168,53 +179,45 @@ if 'user_role' not in st.session_state:
 # --- Model caching using Streamlit's cache_resource ---
 # Preload metadata and warm up cache at app startup
 from llm_backend.model_service import load_metadata
-import os
-project_root = os.path.dirname(os.path.abspath(__file__))
-metadata_path = os.path.join(project_root, '..', 'vector_db', 'metadata.csv')
-try:
-    _ = load_metadata(metadata_path)
-    print(f"[Cache Warmup] Metadata loaded and cached at startup from: {metadata_path}")
-except Exception as e:
-    print(f"[Cache Warmup] Failed to preload metadata: {e}")
 
+# ...existing code...
 
 EMBED_MODEL_NAME = 'all-MiniLM-L6-v2'
 
-# Model, embedding, index, and metadata loading is now handled by backend services or session state only.
-# --- Move retrieve and generate_answer above chat UI ---
-# --- Load FAISS index and metadata ---
-import numpy as np
-import os
-import streamlit as st
+
+# Only load metadata once per session
+def load_metadata_once(metadata_path, chunks_path):
+    import pandas as pd
+    import os
+    if os.path.exists(metadata_path):
+        abs_path = os.path.abspath(metadata_path)
+        print(f"DEBUG: ABSOLUTE metadata_path: {abs_path}", flush=True)
+        temp_df = pd.read_csv(abs_path)
+        # Clean up: drop fully empty rows and duplicates
+        temp_df = temp_df.dropna(how='all')
+        temp_df = temp_df.drop_duplicates()
+        print(f"DEBUG: metadata.csv shape after clean: {temp_df.shape}", flush=True)
+        print(f"DEBUG: metadata.csv head after clean:\n{temp_df.head(10)}", flush=True)
+        return temp_df
+    elif os.path.exists(chunks_path):
+        print(f"DEBUG: metadata_path missing, loading chunks_path: {chunks_path}", flush=True)
+        temp_df = pd.read_csv(chunks_path)
+        temp_df = temp_df.dropna(how='all')
+        temp_df = temp_df.drop_duplicates()
+        print(f"DEBUG: chunks_path shape after clean: {temp_df.shape}", flush=True)
+        print(f"DEBUG: chunks_path head after clean:\n{temp_df.head(10)}", flush=True)
+        return temp_df
+    else:
+        print(f"DEBUG: neither metadata_path nor chunks_path found, using empty DataFrame", flush=True)
+        return pd.DataFrame()
+
 index_path = os.path.join(os.path.dirname(__file__), '..', 'vector_db', 'document_chunks.index')
 metadata_path = os.path.join(os.path.dirname(__file__), '..', 'vector_db', 'metadata.csv')
 chunks_path = os.path.join(os.path.dirname(__file__), '..', 'ingestion', 'document_chunks.csv')
 
-# Only initialize metadata and index once per session
-print(f"DEBUG: loading metadata from: {metadata_path}", flush=True)
 if 'metadata' not in st.session_state:
-    if os.path.exists(metadata_path):
-        import os
-        abs_path = os.path.abspath(metadata_path)
-        print(f"DEBUG: ABSOLUTE metadata_path: {abs_path}", flush=True)
-        temp_df = pd.read_csv(abs_path)
-        print(f"DEBUG: metadata.csv shape after load: {temp_df.shape}", flush=True)
-        print(f"DEBUG: metadata.csv head after load:\n{temp_df.head(10)}", flush=True)
-        st.session_state['metadata'] = temp_df
-        print(f"DEBUG: metadata DataFrame head after session_state assign:\n{st.session_state['metadata'].head(10)}", flush=True)
-
-        # Use backend utility for salary extraction
-        from llm_backend.model_service import extract_salaries_from_metadata
-        salaries = extract_salaries_from_metadata(temp_df)
-        print(f"DEBUG: salaries extracted (unconditional): {salaries}", flush=True)
-    elif os.path.exists(chunks_path):
-        print(f"DEBUG: metadata_path missing, loading chunks_path: {chunks_path}", flush=True)
-        st.session_state['metadata'] = pd.read_csv(chunks_path)
-    else:
-        print(f"DEBUG: neither metadata_path nor chunks_path found, using empty DataFrame", flush=True)
-        st.session_state['metadata'] = pd.DataFrame()
-    # Assign metadata from session state
-    metadata = st.session_state['metadata']
+    st.session_state['metadata'] = load_metadata_once(metadata_path, chunks_path)
+metadata = st.session_state['metadata']
 
 # --- LLM Model Selection and Display ---
 # Define available LLM model options
@@ -481,44 +484,15 @@ with st.form(key='chat_input_form', clear_on_submit=True):
         user_role = st.session_state.get('user_role', 'You')
         metadata = st.session_state.get('metadata', pd.DataFrame())
         bot_response = ''
+        # Debug: print metadata columns and head
+        print(f"DEBUG: metadata columns: {list(metadata.columns)}", flush=True)
+        print(f"DEBUG: metadata head:\n{metadata.head()}", flush=True)
         provenance = None
         model_used = st.session_state.get('selected_model', GEN_MODEL_NAME)
         response_time = None
-        # Engineer RBAC logic
-        if user_role == 'David Kim (Engineer)':
-            from llm_backend.rbac_service import check_engineer_salary_access
-            result = check_engineer_salary_access(user_role, user_input, metadata, fuzzy_any)
-            if result.get('denied'):
-                bot_response = result.get('message', 'Access denied.')
-            elif result.get('salary_row') is not None:
-                df = result['salary_row']
-                bot_response = df.to_html(index=False, escape=False, border=0, classes="salary-table")
-                provenance = 'payroll_confidential.txt'
-            else:
-                bot_response = 'No salary information found.'
-        # HR/CTO logic
-        elif user_role in ['Alice Johnson (HR)', 'Olivia Zhang (CTO)']:
-            from llm_backend.salary_service import get_salary_and_provenance
-            # Extract salaries from metadata
-            salaries = []
-            if isinstance(metadata, pd.DataFrame) and 'text' in metadata.columns:
-                for row in metadata.itertuples():
-                    text_str = str(row.text) if not isinstance(row.text, str) else row.text
-                    match = re.search(r'Name:\s*([^|]+)\s*\|\s*Department:\s*([^|]+)(?:\s*\|\s*Title:\s*([^|]+))?\s*\|\s*Salary:\s*\$([\d,]+)', text_str)
-                    if match:
-                        name = match.group(1).strip()
-                        dept = match.group(2).strip()
-                        title = match.group(3).strip() if match.group(3) else ''
-                        salary = match.group(4).strip()
-                        salaries.append((name, title, dept, salary))
-            result = get_salary_and_provenance(user_role, user_input, salaries, fuzzy_any)
-            if 'html_table' in result:
-                bot_response = result['html_table']
-            elif 'message' in result:
-                bot_response = result['message']
-            provenance = result.get('provenance')
-        else:
-            bot_response = "I'm sorry, I can't answer that."
+        # --- Query routing logic ---
+        from llm_backend.query_router import route_query
+        bot_response, provenance = route_query(user_input, user_role, metadata)
         # Append to chat history
         st.session_state.setdefault('history', []).append((user_input, bot_response, response_time, model_used, provenance, model_used, user_role))
         st.rerun()
@@ -530,13 +504,13 @@ with st.form(key='chat_input_form', clear_on_submit=True):
         # Role-specific icon and label for user chat bubble
         role_icons = {
             'HR': '🧑‍💼',
-            'Engineering': '🧑‍💻',
+            'Technology': '🧑‍💻',
             'David Kim (Engineer)': '🧑‍💻',
             'CTO': '🧑‍💼',
         }
         role_labels = {
             'HR': 'HR',
-            'Engineering': 'Engineering',
+            'Technology': 'Technology',
             'David Kim (Engineer)': 'David Kim (Engineer)',
             'CTO': 'CTO',
         }
@@ -580,76 +554,75 @@ if not ECHO_MODE:
     st.sidebar.markdown("""
 <div style='background:#eaf6ff;border:1.5px solid #b3e5fc;padding:10px 12px 8px 12px;margin-bottom:12px;text-align:center;border-radius:8px;'>
     <span style='font-size:1.08em;font-weight:600;color:#1976d2;'>&#128241; App version:</span><br>
-    <span style='font-size:1.05em;color:#222;'>v1.0.4 - Enterprise RBAC, Role-Preserved Chat, Modern UI</span>
+    <span style='font-size:1.05em;color:#222;'>v1.0.4 - Enterprise RBAC, RAG, Audit Logging, Modern UI</span>
 </div>
 <div class='sidebar-card' style='background:#eaf6ff;font-size:0.93em;margin-bottom:16px;border:1.5px solid #b3e5fc;padding:8px 8px 6px 8px;'>
     <div style='font-weight:700;font-size:1em;line-height:1.2;margin-bottom:2px;text-align:center;'>
-        <span style="font-size:1.05em;vertical-align:middle;">&#129302;</span> AI Search & Knowledge System
+        <span style=\"font-size:1.05em;vertical-align:middle;\">&#129302;</span> AI Search & Knowledge System
     </div>
     <div style='margin:0 0 0 0;font-size:0.91em;line-height:1.35;text-align:center;'>
         <div style='display:flex;align-items:center;justify-content:center;gap:6px;margin-bottom:2px;'>
-            <span style="font-size:1em;">&#128269;</span> <span>Semantic Search (FAISS + SentenceTransformers)</span>
+            <span style=\"font-size:1em;\">&#128269;</span> <span>Semantic Search (FAISS + SentenceTransformers)</span>
         </div>
         <div style='display:flex;align-items:center;justify-content:center;gap:6px;margin-bottom:2px;'>
-            <span style="font-size:1em;">&#128196;</span> <span>Document Q&amp;A (PDF, DOCX, TXT)</span>
+            <span style=\"font-size:1em;\">&#128196;</span> <span>Document Q&amp;A (PDF, DOCX, TXT)</span>
         </div>
         <div style='display:flex;align-items:center;justify-content:center;gap:6px;margin-bottom:2px;'>
-            <span style="font-size:1em;">&#128273;</span> <span>Enterprise RBAC & Audit Logging</span>
+            <span style=\"font-size:1em;\">&#128273;</span> <span>Enterprise-Grade RBAC & Audit Logging</span>
         </div>
         <div style='display:flex;align-items:center;justify-content:center;gap:6px;margin-bottom:2px;'>
-            <span style="font-size:1em;">&#128187;</span> <span>Modern, Unified Chat UI</span>
+            <span style=\"font-size:1em;\">&#128640;</span> <span>Retrieval-Augmented Generation (RAG)</span>
         </div>
         <div style='display:flex;align-items:center;justify-content:center;gap:6px;margin-bottom:2px;'>
-            <span style="font-size:1em;">&#128221;</span> <span>Role-Preserved Chat History</span>
+            <span style=\"font-size:1em;\">&#128187;</span> <span>Modern, Unified Chat UI</span>
         </div>
         <div style='display:flex;align-items:center;justify-content:center;gap:6px;margin-bottom:2px;'>
-            <span style="font-size:1em;">&#128202;</span> <span>Feedback, Metrics, and Logging</span>
+            <span style=\"font-size:1em;\">&#128221;</span> <span>Role-Preserved Chat History</span>
         </div>
         <div style='display:flex;align-items:center;justify-content:center;gap:6px;margin-bottom:2px;'>
-            <span style="font-size:1em;">&#128640;</span> <span>LLM: Ollama & HuggingFace</span>
+            <span style=\"font-size:1em;\">&#128202;</span> <span>Feedback, Metrics, and Logging</span>
         </div>
         <div style='display:flex;align-items:center;justify-content:center;gap:6px;margin-bottom:2px;'>
-            <span style="font-size:1em;">&#128736;</span> <span>Fully Tested (pytest)</span>
-        </div>
-    </div>
-        <div style='display:flex;align-items:center;justify-content:center;gap:6px;margin-bottom:2px;'>
-            <span style="font-size:1em;">&#128737;</span> <span>Private, Local LLM</span>
+            <span style=\"font-size:1em;\">&#128640;</span> <span>LLM: Ollama & HuggingFace</span>
         </div>
         <div style='display:flex;align-items:center;justify-content:center;gap:6px;margin-bottom:2px;'>
-            <span style="font-size:1em;">&#9889;</span> <span>Fast, Modern UI</span>
+            <span style=\"font-size:1em;\">&#128736;</span> <span>Fully Tested (pytest)</span>
         </div>
         <div style='display:flex;align-items:center;justify-content:center;gap:6px;margin-bottom:2px;'>
-            <span style="font-size:1em;">&#128274;</span> <span>Role-Based Access Control (RBAC)</span>
+            <span style=\"font-size:1em;\">&#128737;</span> <span>Private, Local LLM</span>
         </div>
         <div style='display:flex;align-items:center;justify-content:center;gap:6px;margin-bottom:2px;'>
-            <span style="font-size:1em;">&#128100;</span> <span>Role-Preserved Chat History</span>
+            <span style=\"font-size:1em;\">&#9889;</span> <span>Fast, Modern UI</span>
         </div>
-        <div style='display:flex;align-items:center;justify-content:center;gap:6px;'>
-            <span style="font-size:1em;">&#128202;</span> <span>Feedback Logging</span>
+        <div style='display:flex;align-items:center;justify-content:center;gap:6px;margin-bottom:2px;'>
+            <span style=\"font-size:1em;\">&#128274;</span> <span>Strict Role-Based Access Control (RBAC)</span>
         </div>
     </div>
 </div>
 """, unsafe_allow_html=True)
+
+
 
     # Restore About This Project expander at the top
     with st.sidebar.expander("ℹ️ About This Project", expanded=False):
         st.markdown("""
         Portfolio Project
         - Secure, local AI chatbot for enterprise document Q&A
-        - Strict role-based access control (RBAC) for sensitive data
-        - Real-time semantic search and retrieval
+        - Strict, typo-tolerant RBAC for salary, onboarding, and SOP
+        - Retrieval-Augmented Generation (RAG) with semantic search
         - Unified, modern chat UI with persistent role/model display
         - Modular, extensible Python/Streamlit codebase
+        - Robust audit logging and feedback evaluation
         - Production-grade deployment and reproducible environments
-        - Robust feedback logging and evaluation
 
         **Target Audience:**
         Technology executives, engineering leaders, HR professionals, AI/ML practitioners, and technical decision-makers interested in secure document Q&A, RBAC enforcement, and advanced LLM-driven systems for enterprise use cases.
 
         **What This Demonstrates:**
         - Deep LLM integration (Ollama, HuggingFace Transformers)
-        - Multi-role RBAC enforcement and salary logic
-        - Unified, modern chat UI with persistent role/model display
+        - Strict, typo-tolerant RBAC and audit logging
+        - Retrieval-Augmented Generation (RAG) pipeline
+        - Modern, role-preserved chat UI and feedback logging
         - Clean architecture, modular code, and documentation
         - Technical leadership and system design for enterprise AI
     """, unsafe_allow_html=True)
@@ -658,9 +631,9 @@ if not ECHO_MODE:
             st.markdown("[GitHub Repository](https://github.com/obizues/Local-AI-Chatbot-POC)")
             st.markdown("**Documentation**")
             st.markdown("- [README.md](https://github.com/obizues/Local-AI-Chatbot-POC/blob/main/README.md): Project overview, quick start, features")
-            st.markdown("- [ARCHITECTURE.md](https://github.com/obizues/Local-AI-Chatbot-POC/blob/main/ARCHITECTURE.md): Deep technical documentation")
-            st.markdown("- System Diagrams: 5 Mermaid diagrams")
-            st.markdown("**Key Sections:**\n- Multi-agent system design\n- LLM integration strategy\n- Production deployment guide\n- Architectural decision records")
+            st.markdown("- [ARCHITECTURE.md](https://github.com/obizues/Local-AI-Chatbot-POC/blob/main/ARCHITECTURE.md): Deep technical documentation and diagrams")
+            st.markdown("- System Diagrams: Mermaid diagrams for flow, components, and RAG")
+            st.markdown("**Key Sections:**\n- RBAC & Audit Logging\n- RAG & Semantic Search\n- LLM integration strategy\n- Production deployment guide\n- Architectural decision records")
     with st.sidebar.expander("&#128295; Tech Stack", expanded=False):
         st.markdown("""
     <span style='font-size:1em;'>
@@ -677,12 +650,14 @@ if not ECHO_MODE:
     <li>PyMuPDF (PDF ingestion)</li>
     <li>python-docx (DOCX ingestion)</li>
     <li>langchain, llama-index (optional, advanced retrieval)</li>
+    <li>pytest (testing, audit validation)</li>
     </ul>
     </span>
     """, unsafe_allow_html=True)
-st.markdown("""
-<div style='font-size:1.12em;font-weight:700;margin-bottom:8px;'>System Design Notes</div>
-<ul style='margin-bottom:0; padding-left: 18px;'>
+    with st.sidebar.expander("🧩 System Design Notes", expanded=False):
+        st.markdown("""
+    <span style='font-size:1em;'>
+    <ul style='margin-bottom:0; padding-left: 18px;'>
     <li><b>Retrieval-Augmented Chat:</b> User questions are embedded and matched to relevant document chunks using FAISS, providing context for LLM answers.</li>
     <li><b>Unified Chat Interface:</b> Streamlit UI displays chat history, model selection, and sidebar documentation in a single, modern layout.</li>
     <li><b>Session State Management:</b> All chat history, selected model, and user context are stored in Streamlit session state for seamless multi-turn conversations.</li>
@@ -695,6 +670,7 @@ st.markdown("""
     <li><b>Observability:</b> Debug logs and error messages are written to local files for troubleshooting and transparency.</li>
     <li><b>Resilience:</b> Graceful error handling ensures the app remains usable even if some components fail or are unavailable.</li>
     <li><b>Infrastructure:</b> Designed for local use, but can be containerized or deployed on private servers as needed.</li>
-</ul>
-""", unsafe_allow_html=True)
+    </ul>
+    </span>
+    """, unsafe_allow_html=True)
 st.markdown("**Security & Privacy:** All processing is local; no data leaves the user's environment. API keys and secrets are managed via environment variables and never committed to source control.", unsafe_allow_html=True)

@@ -34,25 +34,36 @@
 
 
 
+
 # Changelog
 
-## [v1.0.4] - Release
-
+## [v1.0.4] - 2026-03-02
 ### Added
+- Strict, typo-tolerant RBAC for salary, onboarding, and SOP (HR: all, CTO: Technology only, David Kim: self only)
+- Robust audit logging for all unauthorized access attempts (salary, onboarding, SOP)
+- Unified, modern Streamlit chat UI with persistent role/model display
+- Role-preserved chat history (each message stores the role at time of sending)
+- Fully tested with pytest (RBAC, fallback, audit, onboarding, SOP, typo-tolerance)
+- Advanced semantic search and retrieval (FAISS + SentenceTransformers)
+- Modular, extensible Python/Streamlit codebase
+- New architecture diagrams and documentation for AI search and knowledge system
+- All denials and fallbacks use a unified, branded HTML message
+- Provenance/source display for all answers
+
+### Changed
 - Refactored model and data loading to backend module for performance and maintainability
 - Fixed model selection logic and improved UI responsiveness
-### Added
-- Fully working chatbot UI in Streamlit (ui/app.py)
-- HR salary table extraction and display logic
 - Sidebar/documentation region cleaned and robust
 
 ### Fixed
 - All syntax errors in sidebar/documentation (unterminated strings, stray HTML)
 - HR "show all salaries" logic
+- Audit log path is now configurable for testability
+- All RBAC, onboarding, SOP, and salary logic fully tested and robust
 
 ### Known Issues
 - App is slow due to logic-heavy UI
-- Some business logic still in UI layer
+- Some business logic still in UI layer (to be refactored)
 
 ## [0.6.0] - 2026-02-19
 ### Added
