@@ -12,8 +12,6 @@ flowchart TD
    LLMBackend --> Retrieval[Semantic Retrieval (FAISS + SentenceTransformers)]
    Retrieval --> LLMBackend
    LLMBackend --> ChatWindow
-   RBAC --> ChatWindow
-   ChatWindow --> Audit
    subgraph Data
       VectorDB[vector_db/metadata.csv, .index]
       MockDocs[mock_data/]
@@ -24,10 +22,6 @@ flowchart TD
    Ingest --> VectorDB
    Ingest --> MockDocs
    LLMBackend --> MockDocs
-   ChatWindow --> RBAC
-   RBAC --> LLMBackend
-   LLMBackend --> ChatWindow
-   LLMBackend --> ChatWindow
 ```
 
 # 🤖 Local AI Chatbot POC
