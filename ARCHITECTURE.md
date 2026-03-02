@@ -141,5 +141,3 @@ graph TD
 - See README.md for quick start and usage
 - See CHANGELOG.md for release history
 - See ui/app.py for modern chat UI and RBAC logic
-
----
