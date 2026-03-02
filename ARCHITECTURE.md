@@ -2,15 +2,15 @@
 
 ```mermaid
 flowchart TD
-    UserInput[User Input (UI)] -->|Typed Query| ChatWindow[Chat Window (Streamlit)]
-    ChatWindow -->|Route Query| RBAC[RBAC & Routing (query_router.py)]
-    RBAC -->|Access Check| Audit[Audit Logging]
-    RBAC -->|Allowed| LLMBackend[LLM Backend]
-    LLMBackend -->|RAG Pipeline| Retrieval[Semantic Retrieval (FAISS + SentenceTransformers)]
-    Retrieval -->|Relevant Chunks| LLMBackend
-    LLMBackend -->|Answer| ChatWindow
-    RBAC -->|Denied| ChatWindow
-    ChatWindow -->|Feedback| Audit
+    UserInput[User Input (UI)] --> ChatWindow[Chat Window (Streamlit)]
+    ChatWindow --> RBAC[RBAC & Routing (query_router.py)]
+    RBAC --> Audit[Audit Logging]
+    RBAC --> LLMBackend[LLM Backend]
+    LLMBackend --> Retrieval[Semantic Retrieval (FAISS + SentenceTransformers)]
+    Retrieval --> LLMBackend
+    LLMBackend --> ChatWindow
+    RBAC --> ChatWindow
+    ChatWindow --> Audit
     subgraph Data
         VectorDB[vector_db/metadata.csv, .index]
         MockDocs[mock_data/]
@@ -20,15 +20,12 @@ flowchart TD
     Retrieval --> MockDocs
     Ingest --> VectorDB
     Ingest --> MockDocs
-    LLMBackend -->|Onboarding, SOP, Salary| MockDocs
-    ChatWindow -->|Role Selection| RBAC
-    RBAC -->|Salary/Onboarding/SOP| LLMBackend
-    LLMBackend -->|Salary Table| ChatWindow
-    LLMBackend -->|Onboarding/SOP| ChatWindow
+    LLMBackend --> MockDocs
+    ChatWindow --> RBAC
+    RBAC --> LLMBackend
+    LLMBackend --> ChatWindow
+    LLMBackend --> ChatWindow
 ```
-
-# Component-Level System Diagram
-
 ```mermaid
 flowchart TD
     subgraph UI
@@ -49,13 +46,16 @@ flowchart TD
     end
     A1 --> A2
     A2 --> A3
-    A2 -->|Query| B1
-    A3 -->|Role| B1
-    B1 -->|Access Check| B4
-    B1 -->|Allowed| B2
-    B1 -->|Denied| A2
-    B2 -->|RAG| B3
-    B3 -->|Retrieve| D1
+    A2 --> B1
+    A3 --> B1
+    B1 --> B4
+    B1 --> B2
+    B1 --> A2
+    B2 --> B3
+    B3 --> D1
+    B3 --> D2
+    D3 --> D1
+```
     B3 -->|Retrieve| D2
     D3 --> D1
     D3 --> D2

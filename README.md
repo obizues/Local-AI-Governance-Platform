@@ -5,15 +5,15 @@
 > **Version:** v2.0.0 — March 2, 2026
 ```mermaid
 flowchart TD
-   UserInput[User Input (UI)] -->|Typed Query| ChatWindow[Chat Window (Streamlit)]
-   ChatWindow -->|Route Query| RBAC[RBAC & Routing (query_router.py)]
-   RBAC -->|Access Check| Audit[Audit Logging]
-   RBAC -->|Allowed| LLMBackend[LLM Backend]
-   LLMBackend -->|RAG Pipeline| Retrieval[Semantic Retrieval (FAISS + SentenceTransformers)]
-   Retrieval -->|Relevant Chunks| LLMBackend
-   LLMBackend -->|Answer| ChatWindow
-   RBAC -->|Denied| ChatWindow
-   ChatWindow -->|Feedback| Audit
+   UserInput[User Input (UI)] --> ChatWindow[Chat Window (Streamlit)]
+   ChatWindow --> RBAC[RBAC & Routing (query_router.py)]
+   RBAC --> Audit[Audit Logging]
+   RBAC --> LLMBackend[LLM Backend]
+   LLMBackend --> Retrieval[Semantic Retrieval (FAISS + SentenceTransformers)]
+   Retrieval --> LLMBackend
+   LLMBackend --> ChatWindow
+   RBAC --> ChatWindow
+   ChatWindow --> Audit
    subgraph Data
       VectorDB[vector_db/metadata.csv, .index]
       MockDocs[mock_data/]
@@ -23,11 +23,11 @@ flowchart TD
    Retrieval --> MockDocs
    Ingest --> VectorDB
    Ingest --> MockDocs
-   LLMBackend -->|Onboarding, SOP, Salary| MockDocs
-   ChatWindow -->|Role Selection| RBAC
-   RBAC -->|Salary/Onboarding/SOP| LLMBackend
-   LLMBackend -->|Salary Table| ChatWindow
-   LLMBackend -->|Onboarding/SOP| ChatWindow
+   LLMBackend --> MockDocs
+   ChatWindow --> RBAC
+   RBAC --> LLMBackend
+   LLMBackend --> ChatWindow
+   LLMBackend --> ChatWindow
 ```
 
 # 🤖 Local AI Chatbot POC
