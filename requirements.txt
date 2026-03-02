@@ -8,6 +8,7 @@ llama-index
 streamlit
 flask
 flask-login
+altair==4.2.2
 
 # All chat UI dependencies are now in ui/app.py
 # Requirements for v1.0.4 release: dependencies confirmed
