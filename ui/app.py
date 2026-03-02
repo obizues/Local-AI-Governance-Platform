@@ -282,7 +282,7 @@ with col2:
     )
     if new_role != current_role:
         st.session_state['user_role'] = new_role
-        st.rerun()
+        st.experimental_rerun()
 
 
 # Map dropdown display names to valid HuggingFace model names
@@ -532,7 +532,7 @@ with st.form(key='chat_input_form', clear_on_submit=True):
         st.session_state['query_logs'].append(log_entry)
         append_query_log(log_entry)
         st.session_state.setdefault('history', []).append((user_input, bot_response, response_time, model_used, provenance, model_used, user_role))
-        st.rerun()
+        st.experimental_rerun()
 
 # --- Collapsible Log Viewer at Bottom ---
 with st.expander("Query Logs (Audit)", expanded=False):
