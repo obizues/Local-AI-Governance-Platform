@@ -505,7 +505,9 @@ st.markdown('''
 ''', unsafe_allow_html=True)
 
 st.markdown('<div class="input-bar">', unsafe_allow_html=True)
-user_input = st.text_input("Message", "", key="user_input")
+def clear_input():
+    st.session_state['user_input'] = ""
+user_input = st.text_input("Message", "", key="user_input", on_change=clear_input)
 if user_input.strip():
     user_role = st.session_state.get('user_role', 'You')
     metadata = st.session_state.get('metadata', pd.DataFrame())
@@ -529,7 +531,6 @@ if user_input.strip():
     st.session_state['query_logs'].append(log_entry)
     append_query_log(log_entry)
     st.session_state.setdefault('history', []).append((user_input, bot_response, response_time, model_used, provenance, model_used, user_role))
-    st.session_state['user_input'] = ""  # Clear input after submission
 
 # --- Collapsible Log Viewer at Bottom ---
 with st.expander("Query Logs (Audit)", expanded=False):
