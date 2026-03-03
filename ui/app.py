@@ -28,11 +28,15 @@ def append_query_log(log_entry):
         entry['denial'] = str(entry['denial'])
         writer.writerow(entry)
 
-# --- Initialize persistent query logs in session state ---
 import streamlit as st
+import difflib
+# --- Initialize persistent query logs in session state ---
 if 'query_logs' not in st.session_state:
     logs = load_query_logs()
     st.session_state['query_logs'] = logs if logs is not None else []
+# --- Initialize denial filter state in session state ---
+if 'show_only_denials' not in st.session_state:
+    st.session_state['show_only_denials'] = False
 import pandas as pd
 import faiss
 import re
@@ -93,84 +97,23 @@ st.markdown(
             margin: 0 auto 0 auto;
             padding: 0.7em 0 0.7em 0;
             box-sizing: border-box;
-            border-radius: 0 0 18px 18px;
-            box-shadow: 0 2px 8px rgba(25, 118, 210, 0.10);
-            letter-spacing: 0.01em;
-            max-width: 700px;
-        }
-        .main-title-banner .emoji {
-            font-size: 1.3em;
-            vertical-align: middle;
-            margin-right: 0.18em;
-            filter: none;
-        }
-    </style>
-    <div class="main-title-banner">
-        <span class="emoji">🤖</span> Local AI Chatbot POC
-    </div>
-    """, unsafe_allow_html=True)
-
-
-
-import pandas as pd
-import re
-import time
-import difflib
-from llm_backend.model_service import load_embed_model, load_llm_pipeline, load_faiss_index, load_metadata
-
-# Placeholder variable definitions (replace with actual logic as needed)
-GEN_MODEL_NAME = 'gpt2'
-GEN_MODEL_NAME_DISPLAY = 'GPT-2'
-ECHO_MODE = False
-salary_pattern = re.compile(r"\$[0-9,]+")
-
-app_title_banner = """
-<style>
-.app-title-banner {
-    background: #f5f5f5;
-    color: #222;
-    font-family: 'Segoe UI', 'Arial', sans-serif;
-    font-size: 1.08em;
-    font-weight: 500;
-    text-align: center;
-    margin: 0.5em auto 0 auto;
-    padding: 0.5em 0 0.5em 0;
-    box-sizing: border-box;
-    border-radius: 0 0 12px 12px;
-    box-shadow: 0 2px 8px rgba(25, 118, 210, 0.08);
-    max-width: 700px;
-}
-.app-title-banner .name-title {
-    font-size: 1.18em;
-    font-weight: 700;
-    color: #1976d2;
-    margin-bottom: 0.1em;
-}
-.app-title-banner .subtitle {
-    font-size: 0.98em;
-    color: #1976d2;
-    margin-bottom: 0.2em;
-}
-.app-title-banner .links, .app-title-banner .project-links {
-    font-size: 0.97em;
-    margin-bottom: 0.1em;
-}
-.app-title-banner a {
-    color: #1976d2;
-    text-decoration: underline;
-    margin: 0 8px;
-    font-size: 0.97em;
-}
-.app-title-banner .project-links {
-    margin-top: 0.1em;
-}
-    @media (max-width: 600px) {
-        .app-title-banner { font-size: 0.93em; }
-        .app-title-banner .name-title { font-size: 1em; }
-        .app-title-banner .subtitle { font-size: 0.91em; }
-        .app-title-banner .links, .app-title-banner .project-links { font-size: 0.91em; }
-    }
 </style>
+
+            # --- Log Viewer UI ---
+            with st.expander('Query Log Viewer', expanded=False):
+                st.markdown('**Audit Trail:** All queries and responses are logged below. Use the filter to show only denial logs.')
+                show_only_denials = st.checkbox('Show only denial logs', value=st.session_state['show_only_denials'], key='show_only_denials')
+                # Filter logs based on checkbox
+                logs_to_display = st.session_state['query_logs']
+                if st.session_state['show_only_denials']:
+                    logs_to_display = [log for log in logs_to_display if str(log.get('denial', '')) == 'True']
+                # Display logs in a table
+                if logs_to_display:
+                    st.dataframe(pd.DataFrame(logs_to_display))
+                else:
+                    st.info('No logs to display for the selected filter.')
+
+            # ...existing code for chat input and chat history...
 
 <div class="app-title-banner">
     <div class="name-title" style="font-size:0.95em; font-weight:400; margin-bottom:0.08em; text-align:center; color:#1976d2;"><b>Chris Obermeier</b> | SVP of Engineering</div>
@@ -245,6 +188,8 @@ metadata_path = os.path.join(os.path.dirname(__file__), '..', 'vector_db', 'meta
 chunks_path = os.path.join(os.path.dirname(__file__), '..', 'ingestion', 'document_chunks.csv')
 
 if 'metadata' not in st.session_state:
+        unsafe_allow_html=True
+    )
     st.session_state['metadata'] = load_metadata_once(metadata_path, chunks_path)
 metadata = st.session_state['metadata']
 
