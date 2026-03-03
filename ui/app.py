@@ -466,61 +466,25 @@ with st.form(key='chat_input_form', clear_on_submit=True):
         st.session_state['query_logs'].append(log_entry)
         append_query_log(log_entry)
         st.session_state.setdefault('history', []).append((user_input, bot_response, response_time, model_used, provenance, model_used, user_role))
-    # Always display all chat history (newest at bottom)
-    for entry in reversed(st.session_state.get('history', [])):
-        user, bot, response_time, llm_used, sources, model_used, user_role_at_time = entry if len(entry) == 7 else (entry + (None,) * (7 - len(entry)))
-        llm_display = f' | {model_used}'
-        time_llm_html = f'<span style="font-size:0.85em;color:#888;">{llm_display}</span>'
-        role_icons = {
-            'Alice Johnson (HR)': '🧑‍💼',
-            'David Kim (Engineer)': '🧑‍💻',
-            'Olivia Zhang (CTO)': '🧑‍💼',
-        }
-        role_labels = {
-            'Alice Johnson (HR)': 'Alice Johnson (HR)',
-            'David Kim (Engineer)': 'David Kim (Engineer)',
-            'Olivia Zhang (CTO)': 'Olivia Zhang (CTO)',
-        }
-        if user_role_at_time == 'CTO' or user_role_at_time == 'Olivia Zhang (CTO)':
-            display_role = 'Olivia Zhang (CTO)'
-        elif user_role_at_time == 'HR' or user_role_at_time == 'Alice Johnson (HR)':
-            display_role = 'Alice Johnson (HR)'
-        elif user_role_at_time == 'David Kim (Engineer)':
-            display_role = 'David Kim (Engineer)'
-        else:
-            display_role = user_role_at_time or 'You'
-        icon = role_icons.get(display_role, '🧑')
-        label = role_labels.get(display_role, display_role)
-        chat_html += f'<div class="chat-bubble-user">{icon} <b>{label}:</b> {user}</div>'
-        chat_html += f'<div class="chat-bubble-bot">&#129302; <b>Chatbot:</b> {bot}'
-        if sources and sources not in [None, '', [], 'None'] and not (isinstance(bot, str) and 'Unauthorized access attempt' in bot):
-            def file_to_link(file):
-                try:
-                    rel_path = os.path.relpath(str(file), os.path.dirname(__file__))
-                    rel_path_url = rel_path.replace('\\', '/').replace(' ', '%20')
-                    if rel_path_url.startswith(('mock_data/', 'ingestion/', 'vector_db/')):
-                        return f'<a href="/{rel_path_url}" target="_blank">{os.path.basename(str(file))}</a>'
-                    else:
-                        return os.path.basename(str(file))
-                except Exception:
-                    return os.path.basename(str(file))
-            if isinstance(sources, list) and sources:
-                src_links = ', '.join([file_to_link(s) for s in sources])
-                src_html = f'<br><span style="font-size:0.85em;color:#1976d2;">Sources: {src_links}</span>'
-                chat_html += src_html
-            elif isinstance(sources, str) and sources:
-                chat_html += f'<br><span style="font-size:0.85em;color:#1976d2;">Source: {file_to_link(sources)}</span>'
-        chat_html += '</div>'
-st.markdown(chat_html, unsafe_allow_html=True)
-chat_html += '</div>'
-st.markdown('</div>', unsafe_allow_html=True)
+
+# Audit log dropdown below message input
+with st.expander('Query Log Viewer', expanded=False):
+    st.markdown('**Audit Trail:** All queries and responses are logged below. Use the filter to show only denial logs.')
+    show_only_denials = st.checkbox('Show only denial logs', value=st.session_state['show_only_denials'], key='show_only_denials')
+    logs_to_display = st.session_state['query_logs']
+    if st.session_state['show_only_denials']:
+        logs_to_display = [log for log in logs_to_display if str(log.get('denial', '')) == 'True']
+    if logs_to_display:
+        st.dataframe(pd.DataFrame(logs_to_display))
+    else:
+        st.info('No logs to display for the selected filter.')
 
 # Always render sidebar (do not gate on ECHO_MODE)
 # Collapsible sidebar sections (default collapsed)
 st.sidebar.markdown("""
 <div style='background:#eaf6ff;border:1.5px solid #b3e5fc;padding:10px 12px 8px 12px;margin-bottom:12px;text-align:center;border-radius:8px;'>
     <span style='font-size:1.08em;font-weight:600;color:#1976d2;'>&#128241; App version:</span><br>
-    <span style='font-size:1.05em;color:#222;'>v2.0.1 - Enterprise RBAC, RAG, Audit Logging, Modern UI</span>
+    <span style='font-size:1.05em;color:#222;'>v2.0.4 - Enterprise RBAC, RAG, Audit Logging, Modern UI</span>
 </div>
 <div class='sidebar-card' style='background:#eaf6ff;font-size:0.93em;margin-bottom:16px;border:1.5px solid #b3e5fc;padding:8px 8px 6px 8px;'>
     <div style='font-weight:700;font-size:1em;line-height:1.2;margin-bottom:2px;text-align:center;'>
