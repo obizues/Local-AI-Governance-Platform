@@ -8,8 +8,12 @@
 
 
 
-# [v2.0.1] - 2026-03-02
+# [v2.0.1] - 2026-03-03
 ### Fixed
+- Chat UI now displays the latest user message and bot response immediately after submission (no double submit required)
+- Removed off-by-one delay in chat rendering
+- Improved session state handling for chat history
+- Updated documentation and version references to v2.0.1
 - Ensured reliable imports for llm_backend by adding project root to sys.path in ui/app.py
 - launch_streamlit.py now sets working directory and prints sys.path for debugging
 - Added llm_backend/__init__.py for package recognition

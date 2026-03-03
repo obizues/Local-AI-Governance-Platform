@@ -174,7 +174,7 @@ app_title_banner = """
 
 <div class="app-title-banner">
     <div class="name-title" style="font-size:0.95em; font-weight:400; margin-bottom:0.08em; text-align:center; color:#1976d2;"><b>Chris Obermeier</b> | SVP of Engineering</div>
-    <div class="subtitle" style="background:transparent;border-radius:0;padding:2px 8px;font-size:0.83em;text-align:center;margin-bottom:0.08em;color:#64b5f6;font-weight:400;">Enterprise &amp; PE-Backed Platform Modernization | AI &amp; Data-Driven Transformation</div>
+    <div class="subtitle" style="background:transparent;border-radius:0;padding:2px 8px;font-size:0.83em;text-align:center;margin-bottom:0.08em;color:#64b5f6;font-weight:400;">SVP Engineering | Enterprise Platform & AI Transformation | Led 100+ Engineer Orgs | PE & Revenue-Scale Modernization</div>
     <div class="links" style="font-size:0.92em; font-weight:400; margin-bottom:0em; text-align:center;">
         <a href="https://www.linkedin.com/in/chrisobermeier/" target="_blank">LinkedIn</a> |
         <a href="https://github.com/obizues" target="_blank">GitHub</a> |
@@ -505,94 +505,61 @@ st.markdown('''
 ''', unsafe_allow_html=True)
 
 st.markdown('<div class="input-bar">', unsafe_allow_html=True)
-def clear_input():
-    st.session_state['user_input'] = ""
-user_input = st.text_input("Message", "", key="user_input", on_change=clear_input)
-if user_input.strip():
-    user_role = st.session_state.get('user_role', 'You')
-    metadata = st.session_state.get('metadata', pd.DataFrame())
-    bot_response = ''
-    provenance = None
-    model_used = st.session_state.get('selected_model', GEN_MODEL_NAME)
-    response_time = None
-    timestamp = time.strftime('%Y-%m-%d %H:%M:%S')
-    from llm_backend.query_router import route_query
-    bot_response, provenance = route_query(user_input, user_role, metadata)
-    is_denial = isinstance(bot_response, str) and ('Unauthorized access attempt' in bot_response or 'denied' in bot_response.lower())
-    log_entry = {
-        'timestamp': timestamp,
-        'user': user_role,
-        'query': user_input,
-        'response': bot_response,
-        'denial': is_denial
-    }
-    if 'query_logs' not in st.session_state:
-        st.session_state['query_logs'] = []
-    st.session_state['query_logs'].append(log_entry)
-    append_query_log(log_entry)
-    st.session_state.setdefault('history', []).append((user_input, bot_response, response_time, model_used, provenance, model_used, user_role))
-
-# --- Collapsible Log Viewer at Bottom ---
-with st.expander("Query Logs (Audit)", expanded=False):
-    logs = st.session_state.get('query_logs', [])
-    show_denials_only = st.checkbox("Show only denial logs", value=False, key="show_denials_only")
-    # Handle both bool and string 'denial' values, and fallback to response text if needed
-    def is_denial_true(log):
-        val = log.get('denial')
-        # If denial is a bool or string 'true', treat as denial
-        if val is True or (isinstance(val, str) and val.lower() == 'true'):
-            return True
-        # Fallback: check if response contains denial text
-        resp = str(log.get('response', ''))
-        return (
-            'do not have access' in resp.lower() or
-            'unauthorized access attempt' in resp.lower() or
-            'denied' in resp.lower()
-        )
-    if show_denials_only:
-        logs_to_show = [log for log in logs if is_denial_true(log)]
-    else:
-        logs_to_show = logs
-    if logs_to_show:
-        import pandas as pd
-        logs_df = pd.DataFrame(logs_to_show)
-        if not logs_df.empty:
-            # Convert all columns to string to avoid Arrow LargeUtf8 errors
-            logs_df = logs_df.astype(str)
-            import re
-            def strip_html_and_truncate(text, maxlen=50):
-                txt = re.sub('<[^<]+?>', '', text) if isinstance(text, str) else text
-                return txt[:maxlen] + ('...' if txt and len(txt) > maxlen else '')
-            logs_df['response'] = logs_df['response'].apply(strip_html_and_truncate)
-            st.dataframe(logs_df, height=250)
-        else:
-            st.info("No logs to display.")
-    else:
-        st.info("No logs to display.")
-        # chat_html += f'<div>'
-        # Role-specific icon and label for user chat bubble
+chat_html = '<div class="scrollable-chat-window">'
+with st.form(key='chat_input_form', clear_on_submit=True):
+    user_input = st.text_input("Message", "", key="user_input")
+    submitted = st.form_submit_button("Send")
+    if submitted and user_input.strip():
+        user_role = st.session_state.get('user_role', 'You')
+        metadata = st.session_state.get('metadata', pd.DataFrame())
+        bot_response = ''
+        provenance = None
+        model_used = st.session_state.get('selected_model', GEN_MODEL_NAME)
+        response_time = None
+        timestamp = time.strftime('%Y-%m-%d %H:%M:%S')
+        from llm_backend.query_router import route_query
+        bot_response, provenance = route_query(user_input, user_role, metadata)
+        is_denial = isinstance(bot_response, str) and ('Unauthorized access attempt' in bot_response or 'denied' in bot_response.lower())
+        log_entry = {
+            'timestamp': timestamp,
+            'user': user_role,
+            'query': user_input,
+            'response': bot_response,
+            'denial': is_denial
+        }
+        if 'query_logs' not in st.session_state:
+            st.session_state['query_logs'] = []
+        st.session_state['query_logs'].append(log_entry)
+        append_query_log(log_entry)
+        st.session_state.setdefault('history', []).append((user_input, bot_response, response_time, model_used, provenance, model_used, user_role))
+    # Always display all chat history (newest at bottom)
+    for entry in reversed(st.session_state.get('history', [])):
+        user, bot, response_time, llm_used, sources, model_used, user_role_at_time = entry if len(entry) == 7 else (entry + (None,) * (7 - len(entry)))
+        llm_display = f' | {model_used}'
+        time_llm_html = f'<span style="font-size:0.85em;color:#888;">{llm_display}</span>'
         role_icons = {
-            'HR': '🧑‍💼',
-            'Technology': '🧑‍💻',
+            'Alice Johnson (HR)': '🧑‍💼',
             'David Kim (Engineer)': '🧑‍💻',
-            'CTO': '🧑‍💼',
+            'Olivia Zhang (CTO)': '🧑‍💼',
         }
         role_labels = {
-            'HR': 'HR',
-            'Technology': 'Technology',
+            'Alice Johnson (HR)': 'Alice Johnson (HR)',
             'David Kim (Engineer)': 'David Kim (Engineer)',
-            'CTO': 'CTO',
+            'Olivia Zhang (CTO)': 'Olivia Zhang (CTO)',
         }
-        # Placeholder for user_role_at_time to avoid NameError
-        display_role = 'You'
+        if user_role_at_time == 'CTO' or user_role_at_time == 'Olivia Zhang (CTO)':
+            display_role = 'Olivia Zhang (CTO)'
+        elif user_role_at_time == 'HR' or user_role_at_time == 'Alice Johnson (HR)':
+            display_role = 'Alice Johnson (HR)'
+        elif user_role_at_time == 'David Kim (Engineer)':
+            display_role = 'David Kim (Engineer)'
+        else:
+            display_role = user_role_at_time or 'You'
         icon = role_icons.get(display_role, '🧑')
         label = role_labels.get(display_role, display_role)
-        # chat_html += f'<div class="chat-bubble-user">{icon} <b>{label}:</b> {user}</div>'
-        # chat_html += f'<div class="chat-bubble-bot">&#129302; <b>Bot:</b> {bot}'
-        # Show source file for onboarding answers
-        # Only show sources if not None, not empty, and not a denial/warning message
-        sources = None  # Placeholder to avoid NameError
-        if sources and sources not in [None, '', [], 'None']:
+        chat_html += f'<div class="chat-bubble-user">{icon} <b>{label}:</b> {user}</div>'
+        chat_html += f'<div class="chat-bubble-bot">&#129302; <b>Chatbot:</b> {bot}'
+        if sources and sources not in [None, '', [], 'None'] and not (isinstance(bot, str) and 'Unauthorized access attempt' in bot):
             def file_to_link(file):
                 try:
                     rel_path = os.path.relpath(str(file), os.path.dirname(__file__))
@@ -609,6 +576,9 @@ with st.expander("Query Logs (Audit)", expanded=False):
                 chat_html += src_html
             elif isinstance(sources, str) and sources:
                 chat_html += f'<br><span style="font-size:0.85em;color:#1976d2;">Source: {file_to_link(sources)}</span>'
+        chat_html += '</div>'
+st.markdown(chat_html, unsafe_allow_html=True)
+chat_html += '</div>'
 st.markdown('</div>', unsafe_allow_html=True)
 
 # Always render sidebar (do not gate on ECHO_MODE)
