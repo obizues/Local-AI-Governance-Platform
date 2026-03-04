@@ -15,7 +15,7 @@ def load_query_logs():
             reader = csv.DictReader(f)
             return list(reader)
     else:
-        st.info("No logs to display.")
+        return []
 
 def append_query_log(log_entry):
     file_exists = os.path.exists(LOG_CSV_PATH)
@@ -28,11 +28,15 @@ def append_query_log(log_entry):
         entry['denial'] = str(entry['denial'])
         writer.writerow(entry)
 
-# --- Initialize persistent query logs in session state ---
 import streamlit as st
+import difflib
+# --- Initialize persistent query logs in session state ---
 if 'query_logs' not in st.session_state:
     logs = load_query_logs()
     st.session_state['query_logs'] = logs if logs is not None else []
+# --- Initialize denial filter state in session state ---
+if 'show_only_denials' not in st.session_state:
+    st.session_state['show_only_denials'] = False
 import pandas as pd
 import faiss
 import re
@@ -93,90 +97,29 @@ st.markdown(
             margin: 0 auto 0 auto;
             padding: 0.7em 0 0.7em 0;
             box-sizing: border-box;
-            border-radius: 0 0 18px 18px;
-            box-shadow: 0 2px 8px rgba(25, 118, 210, 0.10);
-            letter-spacing: 0.01em;
-            max-width: 700px;
-        }
-        .main-title-banner .emoji {
-            font-size: 1.3em;
-            vertical-align: middle;
-            margin-right: 0.18em;
-            filter: none;
-        }
-    </style>
-    <div class="main-title-banner">
-        <span class="emoji">🤖</span> Local AI Chatbot POC
-    </div>
-    """, unsafe_allow_html=True)
-
-
-
-import pandas as pd
-import re
-import time
-import difflib
-from llm_backend.model_service import load_embed_model, load_llm_pipeline, load_faiss_index, load_metadata
-
-# Placeholder variable definitions (replace with actual logic as needed)
-GEN_MODEL_NAME = 'gpt2'
-GEN_MODEL_NAME_DISPLAY = 'GPT-2'
-ECHO_MODE = False
-salary_pattern = re.compile(r"\$[0-9,]+")
-
-app_title_banner = """
-<style>
-.app-title-banner {
-    background: #f5f5f5;
-    color: #222;
-    font-family: 'Segoe UI', 'Arial', sans-serif;
-    font-size: 1.08em;
-    font-weight: 500;
-    text-align: center;
-    margin: 0.5em auto 0 auto;
-    padding: 0.5em 0 0.5em 0;
-    box-sizing: border-box;
-    border-radius: 0 0 12px 12px;
-    box-shadow: 0 2px 8px rgba(25, 118, 210, 0.08);
-    max-width: 700px;
-}
-.app-title-banner .name-title {
-    font-size: 1.18em;
-    font-weight: 700;
-    color: #1976d2;
-    margin-bottom: 0.1em;
-}
-.app-title-banner .subtitle {
-    font-size: 0.98em;
-    color: #1976d2;
-    margin-bottom: 0.2em;
-}
-.app-title-banner .links, .app-title-banner .project-links {
-    font-size: 0.97em;
-    margin-bottom: 0.1em;
-}
-.app-title-banner a {
-    color: #1976d2;
-    text-decoration: underline;
-    margin: 0 8px;
-    font-size: 0.97em;
-}
-.app-title-banner .project-links {
-    margin-top: 0.1em;
-}
-    @media (max-width: 600px) {
-        .app-title-banner { font-size: 0.93em; }
-        .app-title-banner .name-title { font-size: 1em; }
-        .app-title-banner .subtitle { font-size: 0.91em; }
-        .app-title-banner .links, .app-title-banner .project-links { font-size: 0.91em; }
-    }
 </style>
+
+            # --- Log Viewer UI ---
+            with st.expander('Query Log Viewer', expanded=False):
+                st.markdown('**Audit Trail:** All queries and responses are logged below. Use the filter to show only denial logs.')
+                show_only_denials = st.checkbox('Show only denial logs', value=st.session_state['show_only_denials'], key='show_only_denials')
+                # Filter logs based on checkbox
+                logs_to_display = st.session_state['query_logs']
+                if st.session_state['show_only_denials']:
+                    logs_to_display = [log for log in logs_to_display if str(log.get('denial', '')) == 'True']
+                # Display logs in a table
+                if logs_to_display:
+                    st.dataframe(pd.DataFrame(logs_to_display))
+                else:
+                    st.info('No logs to display for the selected filter.')
+
+            # ...existing code for chat input and chat history...
 
 <div class="app-title-banner">
     <div class="name-title" style="font-size:0.95em; font-weight:400; margin-bottom:0.08em; text-align:center; color:#1976d2;"><b>Chris Obermeier</b> | SVP of Engineering</div>
-    <div class="subtitle" style="background:transparent;border-radius:0;padding:2px 8px;font-size:0.83em;text-align:center;margin-bottom:0.08em;color:#64b5f6;font-weight:400;">Enterprise &amp; PE-Backed Platform Modernization | AI &amp; Data-Driven Transformation</div>
+    <div class="subtitle" style="background:transparent;border-radius:0;padding:2px 8px;font-size:0.83em;text-align:center;margin-bottom:0.08em;color:#64b5f6;font-weight:400;">SVP Engineering | Enterprise Platform & AI Transformation | Led 100+ Engineer Orgs | PE & Revenue-Scale Modernization</div>
     <div class="links" style="font-size:0.92em; font-weight:400; margin-bottom:0em; text-align:center;">
-        <a href="https://www.linkedin.com/in/chris-obermeier/" target="_blank">LinkedIn</a> |
+        <a href="https://www.linkedin.com/in/chrisobermeier/" target="_blank">LinkedIn</a> |
         <a href="https://github.com/obizues" target="_blank">GitHub</a> |
         <a href="mailto:chris.obermeier@gmail.com" target="_blank">Email</a>
     </div>
@@ -245,6 +188,8 @@ metadata_path = os.path.join(os.path.dirname(__file__), '..', 'vector_db', 'meta
 chunks_path = os.path.join(os.path.dirname(__file__), '..', 'ingestion', 'document_chunks.csv')
 
 if 'metadata' not in st.session_state:
+        unsafe_allow_html=True
+    )
     st.session_state['metadata'] = load_metadata_once(metadata_path, chunks_path)
 metadata = st.session_state['metadata']
 
@@ -282,17 +227,7 @@ with col2:
     )
     if new_role != current_role:
         st.session_state['user_role'] = new_role
-        if hasattr(st, "rerun"):
-            st.rerun()
-        elif hasattr(st, "experimental_rerun"):
-            if hasattr(st, "rerun"):
-                st.rerun()
-            elif hasattr(st, "experimental_rerun"):
-                st.experimental_rerun()
-            else:
-                st.warning("Streamlit rerun is not available in this version. Please upgrade Streamlit for full functionality.")
-        else:
-            st.warning("Streamlit rerun is not available in this version. Please upgrade Streamlit for full functionality.")
+        st.experimental_rerun()
 
 
 # Map dropdown display names to valid HuggingFace model names
@@ -515,8 +450,8 @@ st.markdown('''
 ''', unsafe_allow_html=True)
 
 st.markdown('<div class="input-bar">', unsafe_allow_html=True)
+chat_html = '<div class="scrollable-chat-window">'
 with st.form(key='chat_input_form', clear_on_submit=True):
-    # Only one text_input with key 'user_input' in the form
     user_input = st.text_input("Message", "", key="user_input")
     submitted = st.form_submit_button("Send")
     if submitted and user_input.strip():
@@ -542,89 +477,34 @@ with st.form(key='chat_input_form', clear_on_submit=True):
         st.session_state['query_logs'].append(log_entry)
         append_query_log(log_entry)
         st.session_state.setdefault('history', []).append((user_input, bot_response, response_time, model_used, provenance, model_used, user_role))
-        if hasattr(st, "rerun"):
-            st.rerun()
-        elif hasattr(st, "experimental_rerun"):
-            st.experimental_rerun()
-        else:
-            st.warning("Streamlit rerun is not available in this version. Please upgrade Streamlit for full functionality.")
-
-# --- Collapsible Log Viewer at Bottom ---
-with st.expander("Query Logs (Audit)", expanded=False):
-    logs = st.session_state.get('query_logs', [])
-    show_denials_only = st.checkbox("Show only denial logs", value=False, key="show_denials_only")
-    # Handle both bool and string 'denial' values, and fallback to response text if needed
-    def is_denial_true(log):
-        val = log.get('denial')
-        # If denial is a bool or string 'true', treat as denial
-        if val is True or (isinstance(val, str) and val.lower() == 'true'):
-            return True
-        # Fallback: check if response contains denial text
-        resp = str(log.get('response', ''))
-        return (
-            'do not have access' in resp.lower() or
-            'unauthorized access attempt' in resp.lower() or
-            'denied' in resp.lower()
-        )
-    if show_denials_only:
-        logs_to_show = [log for log in logs if is_denial_true(log)]
-    else:
-        logs_to_show = logs
-    if logs_to_show:
-        import pandas as pd
-        from st_aggrid import AgGrid, GridOptionsBuilder
-        import pandas as pd
-        import re
-        def strip_html(text):
-            if not isinstance(text, str):
-                text = str(text) if text is not None else ''
-            return re.sub(r'<[^>]+>', '', text)
-        def preprocess_log_entry(entry, max_response_len=300):
-            new_entry = {}
-            for k, v in entry.items():
-                s = str(v) if v is not None else ''
-                if k == 'response':
-                    s = strip_html(s)
-                    if len(s) > max_response_len:
-                        s = s[:max_response_len] + '... [truncated]'
-                s = s.replace('\n', ' ').replace('\r', ' ').replace('\t', ' ')
-                if len(s) > 500:
-                    s = s[:500] + '... [truncated]'
-                new_entry[k] = s
-            return new_entry
-        processed_logs = [preprocess_log_entry(log) for log in logs_to_show[-100:]]
-        df = pd.DataFrame(processed_logs)
-        gb = GridOptionsBuilder.from_dataframe(df)
-        gb.configure_pagination(paginationAutoPageSize=True)
-        gb.configure_default_column(resizable=True, filter=True, sortable=True)
-        gridOptions = gb.build()
-        AgGrid(df, gridOptions=gridOptions, height=400, theme="streamlit")
-    else:
-        st.info("No logs to display.")
-        # chat_html += f'<div>'
-        # Role-specific icon and label for user chat bubble
+    # Always display all chat history (newest at bottom)
+    for entry in reversed(st.session_state.get('history', [])):
+        user, bot, response_time, llm_used, sources, model_used, user_role_at_time = entry if len(entry) == 7 else (entry + (None,) * (7 - len(entry)))
+        llm_display = f' | {model_used}'
+        time_llm_html = f'<span style="font-size:0.85em;color:#888;">{llm_display}</span>'
         role_icons = {
-            'HR': '🧑‍💼',
-            'Technology': '🧑‍💻',
+            'Alice Johnson (HR)': '🧑‍💼',
             'David Kim (Engineer)': '🧑‍💻',
-            'CTO': '🧑‍💼',
+            'Olivia Zhang (CTO)': '🧑‍💼',
         }
         role_labels = {
-            'HR': 'HR',
-            'Technology': 'Technology',
+            'Alice Johnson (HR)': 'Alice Johnson (HR)',
             'David Kim (Engineer)': 'David Kim (Engineer)',
-            'CTO': 'CTO',
+            'Olivia Zhang (CTO)': 'Olivia Zhang (CTO)',
         }
-        # Placeholder for user_role_at_time to avoid NameError
-        display_role = 'You'
+        if user_role_at_time == 'CTO' or user_role_at_time == 'Olivia Zhang (CTO)':
+            display_role = 'Olivia Zhang (CTO)'
+        elif user_role_at_time == 'HR' or user_role_at_time == 'Alice Johnson (HR)':
+            display_role = 'Alice Johnson (HR)'
+        elif user_role_at_time == 'David Kim (Engineer)':
+            display_role = 'David Kim (Engineer)'
+        else:
+            display_role = user_role_at_time or 'You'
         icon = role_icons.get(display_role, '🧑')
         label = role_labels.get(display_role, display_role)
-        # chat_html += f'<div class="chat-bubble-user">{icon} <b>{label}:</b> {user}</div>'
-        # chat_html += f'<div class="chat-bubble-bot">&#129302; <b>Bot:</b> {bot}'
-        # Show source file for onboarding answers
-        # Only show sources if not None, not empty, and not a denial/warning message
-        sources = None  # Placeholder to avoid NameError
-        if sources and sources not in [None, '', [], 'None']:
+        chat_html += f'<div class="chat-bubble-user">{icon} <b>{label}:</b> {user}</div>'
+        chat_html += f'<div class="chat-bubble-bot">&#129302; <b>Chatbot:</b> {bot}'
+        if sources and sources not in [None, '', [], 'None'] and not (isinstance(bot, str) and 'Unauthorized access attempt' in bot):
             def file_to_link(file):
                 try:
                     rel_path = os.path.relpath(str(file), os.path.dirname(__file__))
@@ -641,6 +521,9 @@ with st.expander("Query Logs (Audit)", expanded=False):
                 chat_html += src_html
             elif isinstance(sources, str) and sources:
                 chat_html += f'<br><span style="font-size:0.85em;color:#1976d2;">Source: {file_to_link(sources)}</span>'
+        chat_html += '</div>'
+st.markdown(chat_html, unsafe_allow_html=True)
+chat_html += '</div>'
 st.markdown('</div>', unsafe_allow_html=True)
 
 # Always render sidebar (do not gate on ECHO_MODE)
@@ -648,7 +531,7 @@ st.markdown('</div>', unsafe_allow_html=True)
 st.sidebar.markdown("""
 <div style='background:#eaf6ff;border:1.5px solid #b3e5fc;padding:10px 12px 8px 12px;margin-bottom:12px;text-align:center;border-radius:8px;'>
     <span style='font-size:1.08em;font-weight:600;color:#1976d2;'>&#128241; App version:</span><br>
-    <span style='font-size:1.05em;color:#222;'>v2.2.2 - Enterprise RBAC, RAG, Audit Logging, Modern UI</span>
+    <span style='font-size:1.05em;color:#222;'>v2.0.1 - Enterprise RBAC, RAG, Audit Logging, Modern UI</span>
 </div>
 <div class='sidebar-card' style='background:#eaf6ff;font-size:0.93em;margin-bottom:16px;border:1.5px solid #b3e5fc;padding:8px 8px 6px 8px;'>
     <div style='font-weight:700;font-size:1em;line-height:1.2;margin-bottom:2px;text-align:center;'>
@@ -723,7 +606,7 @@ Technology executives, engineering leaders, HR professionals, AI/ML practitioner
 - Technical leadership and system design for enterprise AI
 - **Persistent, filterable audit logs for all queries and denials**
 """, unsafe_allow_html=True)
-with st.sidebar.expander("&#128193; Project Documentation", expanded=False):
+with st.sidebar.expander("📄 Project Documentation", expanded=False):
     st.markdown("**Project Documentation**")
     st.markdown("[GitHub Repository](https://github.com/obizues/Local-AI-Chatbot-POC)")
     st.markdown("**Documentation**")
@@ -731,7 +614,7 @@ with st.sidebar.expander("&#128193; Project Documentation", expanded=False):
     st.markdown("- [ARCHITECTURE.md](https://github.com/obizues/Local-AI-Chatbot-POC/blob/main/ARCHITECTURE.md): Deep technical documentation and diagrams")
     st.markdown("- System Diagrams: Mermaid diagrams for flow, components, and RAG")
     st.markdown("**Key Sections:**\n- RBAC & Audit Logging\n- RAG & Semantic Search\n- LLM integration strategy\n- Production deployment guide\n- Architectural decision records")
-with st.sidebar.expander("&#128295; Tech Stack", expanded=False):
+with st.sidebar.expander("🧰 Tech Stack", expanded=False):
     st.markdown("""
 <span style='font-size:1em;'>
 <ul style='margin-bottom:0; padding-left: 18px;'>
