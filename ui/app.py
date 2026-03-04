@@ -282,7 +282,17 @@ with col2:
     )
     if new_role != current_role:
         st.session_state['user_role'] = new_role
-        st.experimental_rerun()
+        if hasattr(st, "rerun"):
+            st.rerun()
+        elif hasattr(st, "experimental_rerun"):
+            if hasattr(st, "rerun"):
+                st.rerun()
+            elif hasattr(st, "experimental_rerun"):
+                st.experimental_rerun()
+            else:
+                st.warning("Streamlit rerun is not available in this version. Please upgrade Streamlit for full functionality.")
+        else:
+            st.warning("Streamlit rerun is not available in this version. Please upgrade Streamlit for full functionality.")
 
 
 # Map dropdown display names to valid HuggingFace model names
@@ -532,10 +542,19 @@ with st.form(key='chat_input_form', clear_on_submit=True):
         st.session_state['query_logs'].append(log_entry)
         append_query_log(log_entry)
         st.session_state.setdefault('history', []).append((user_input, bot_response, response_time, model_used, provenance, model_used, user_role))
-        st.experimental_rerun()
+        if hasattr(st, "rerun"):
+            st.rerun()
+        elif hasattr(st, "experimental_rerun"):
+            st.experimental_rerun()
+        else:
+            st.warning("Streamlit rerun is not available in this version. Please upgrade Streamlit for full functionality.")
 
 # --- Collapsible Log Viewer at Bottom ---
 with st.expander("Query Logs (Audit)", expanded=False):
+    # Always reload logs from persistent storage if session_state is empty
+    if 'query_logs' not in st.session_state or not st.session_state['query_logs']:
+        loaded_logs = load_query_logs()
+        st.session_state['query_logs'] = loaded_logs if loaded_logs is not None else []
     logs = st.session_state.get('query_logs', [])
     show_denials_only = st.checkbox("Show only denial logs", value=False, key="show_denials_only")
     # Handle both bool and string 'denial' values, and fallback to response text if needed
@@ -551,10 +570,14 @@ with st.expander("Query Logs (Audit)", expanded=False):
             'unauthorized access attempt' in resp.lower() or
             'denied' in resp.lower()
         )
-    if show_denials_only:
-        logs_to_show = [log for log in logs if is_denial_true(log)]
+    # Always initialize logs_to_show correctly on first open
+    if logs:
+        if show_denials_only:
+            logs_to_show = [log for log in logs if is_denial_true(log)]
+        else:
+            logs_to_show = logs
     else:
-        logs_to_show = logs
+        logs_to_show = []
     if logs_to_show:
         import pandas as pd
         from st_aggrid import AgGrid, GridOptionsBuilder
@@ -583,7 +606,9 @@ with st.expander("Query Logs (Audit)", expanded=False):
         gb.configure_pagination(paginationAutoPageSize=True)
         gb.configure_default_column(resizable=True, filter=True, sortable=True)
         gridOptions = gb.build()
-        AgGrid(df, gridOptions=gridOptions, height=400, theme="streamlit")
+        import hashlib
+        logs_hash = hashlib.md5(pd.util.hash_pandas_object(df, index=True).values).hexdigest()
+        AgGrid(df, gridOptions=gridOptions, height=400, theme="streamlit", key=f"aggrid_logs_{logs_hash}")
     else:
         st.info("No logs to display.")
         # chat_html += f'<div>'
