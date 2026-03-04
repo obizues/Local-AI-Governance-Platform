@@ -1,10 +1,7 @@
-# [v2.1.0] - 2026-03-04
+# [v2.2.0] - 2026-03-04
 ### Changed
-- Denial detection logic improved for audit logs and retroactive flagging
-- Audit log filter now works for all historical and new logs
-- UI and backend logic for audit log filtering and denial flagging
-- Denial logs visually highlighted in red for clarity
-
+- Stable universal audit log table (st.table, last 100 entries, HTML stripped, all values sanitized)
+# [v2.1.0] - 2026-03-02
 ### Added
 - Persistent query logging and audit trail (CSV-based)
 - Collapsible log viewer in UI with denial log filtering and selection
@@ -14,19 +11,11 @@
 
 
 
-# [v2.0.4] - 2026-03-04
-### Added
-- Restored audit log dropdown below message input
-- Denial log filtering and log display
-
-### Changed
-- Denial detection logic improved for audit logs and retroactive flagging
-- Audit log filter now works for all historical and new logs
-- UI and backend logic for audit log filtering and denial flagging
-
+# [v2.0.1] - 2026-03-02
 ### Fixed
-- Removed duplicate chatbox
-- Classic chat UI restored
+- Ensured reliable imports for llm_backend by adding project root to sys.path in ui/app.py
+- launch_streamlit.py now sets working directory and prints sys.path for debugging
+- Added llm_backend/__init__.py for package recognition
 
 
 

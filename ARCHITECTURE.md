@@ -126,15 +126,17 @@ flowchart TD
 
 ## Persistent Query Logging (v2.1.0)
 
+- All user queries and responses are logged to a CSV file (`query_logs.csv`) for a persistent audit trail.
+- On app startup, the Streamlit session state is initialized from the CSV log, ensuring all previous logs are loaded and visible in the UI.
+- New queries are appended to both the session state and the CSV file, guaranteeing persistence across restarts.
+- The log viewer UI allows filtering for denials and highlights denied queries.
 
 **Flow:**
 1. On app start, `load_query_logs()` reads `query_logs.csv` and populates `st.session_state['query_logs']`.
 2. Each new query appends a log entry to both session state and the CSV file.
 3. The log viewer displays all logs from session state, with options to filter and highlight denials.
 
-## v2.1.0 Architecture Notes
-
-**Version:** v2.1.1
+## Diagrams
 ### Chat UI and Data Flow (Mermaid)
 
 ```mermaid

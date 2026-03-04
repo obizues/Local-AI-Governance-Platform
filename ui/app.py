@@ -1,67 +1,38 @@
-import sys
 import os
+import sys
 # Ensure project root is in sys.path for imports
 project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
-import streamlit as st
-from llm_backend.model_service import load_llm_pipeline
-import os
-import pandas as pd
-import re
-import time
-import difflib
-
 # --- Persistent Query Log Utilities ---
+import csv
 LOG_CSV_PATH = os.path.join(os.path.dirname(__file__), '..', 'query_logs.csv')
 
 def load_query_logs():
     if os.path.exists(LOG_CSV_PATH):
-        import csv
         with open(LOG_CSV_PATH, 'r', encoding='utf-8') as f:
             reader = csv.DictReader(f)
             return list(reader)
     else:
-        return []
+        st.info("No logs to display.")
 
 def append_query_log(log_entry):
-    import csv
     file_exists = os.path.exists(LOG_CSV_PATH)
     with open(LOG_CSV_PATH, 'a', encoding='utf-8', newline='') as f:
         writer = csv.DictWriter(f, fieldnames=['timestamp', 'user', 'query', 'response', 'denial'])
         if not file_exists:
             writer.writeheader()
+        # Convert boolean to string for CSV
         entry = log_entry.copy()
         entry['denial'] = str(entry['denial'])
         writer.writerow(entry)
 
-# --- Retroactively flag denial logs in query_logs.csv ---
-import csv
-csv_path = LOG_CSV_PATH
-if os.path.exists(csv_path):
-    denial_keywords = [
-        'unauthorized', 'denied', 'forbidden', 'not allowed', 'access denied',
-        'you do not have access', "you don't have access", 'permission denied', 'insufficient permissions', 'color:red'
-    ]
-    with open(csv_path, 'r', encoding='utf-8') as f:
-        reader = list(csv.DictReader(f))
-    for log in reader:
-        resp = str(log.get('response', '')).lower()
-        log['denial'] = str(any(kw in resp for kw in denial_keywords))
-    with open(csv_path, 'w', encoding='utf-8', newline='') as f:
-        writer = csv.DictWriter(f, fieldnames=['timestamp', 'user', 'query', 'response', 'denial'])
-        writer.writeheader()
-        writer.writerows(reader)
-
-
 # --- Initialize persistent query logs in session state ---
+import streamlit as st
 if 'query_logs' not in st.session_state:
     logs = load_query_logs()
     st.session_state['query_logs'] = logs if logs is not None else []
-# --- Initialize denial filter state in session state ---
-if 'show_only_denials' not in st.session_state:
-    st.session_state['show_only_denials'] = False
 import pandas as pd
 import faiss
 import re
@@ -125,7 +96,7 @@ st.markdown(
             border-radius: 0 0 18px 18px;
             box-shadow: 0 2px 8px rgba(25, 118, 210, 0.10);
             letter-spacing: 0.01em;
-            max-width: 1100px;
+            max-width: 700px;
         }
         .main-title-banner .emoji {
             font-size: 1.3em;
@@ -135,11 +106,23 @@ st.markdown(
         }
     </style>
     <div class="main-title-banner">
-        <span class="emoji">🤖</span> Local AI Governance Platform
+        <span class="emoji">🤖</span> Local AI Chatbot POC
     </div>
-    """
-    , unsafe_allow_html=True
-)
+    """, unsafe_allow_html=True)
+
+
+
+import pandas as pd
+import re
+import time
+import difflib
+from llm_backend.model_service import load_embed_model, load_llm_pipeline, load_faiss_index, load_metadata
+
+# Placeholder variable definitions (replace with actual logic as needed)
+GEN_MODEL_NAME = 'gpt2'
+GEN_MODEL_NAME_DISPLAY = 'GPT-2'
+ECHO_MODE = False
+salary_pattern = re.compile(r"\$[0-9,]+")
 
 app_title_banner = """
 <style>
@@ -155,7 +138,7 @@ app_title_banner = """
     box-sizing: border-box;
     border-radius: 0 0 12px 12px;
     box-shadow: 0 2px 8px rgba(25, 118, 210, 0.08);
-    max-width: 1100px;
+    max-width: 700px;
 }
 .app-title-banner .name-title {
     font-size: 1.18em;
@@ -181,7 +164,7 @@ app_title_banner = """
 .app-title-banner .project-links {
     margin-top: 0.1em;
 }
-    @media (max-width: 1100px) {
+    @media (max-width: 600px) {
         .app-title-banner { font-size: 0.93em; }
         .app-title-banner .name-title { font-size: 1em; }
         .app-title-banner .subtitle { font-size: 0.91em; }
@@ -191,7 +174,7 @@ app_title_banner = """
 
 <div class="app-title-banner">
     <div class="name-title" style="font-size:0.95em; font-weight:400; margin-bottom:0.08em; text-align:center; color:#1976d2;"><b>Chris Obermeier</b> | SVP of Engineering</div>
-    <div class="subtitle" style="background:transparent;border-radius:0;padding:2px 8px;font-size:0.83em;text-align:center;margin-bottom:0.08em;color:#64b5f6;font-weight:400;">Enterprise Platform & AI Transformation | Led 100+ Engineer Orgs | PE & Revenue-Scale Modernization</div>
+    <div class="subtitle" style="background:transparent;border-radius:0;padding:2px 8px;font-size:0.83em;text-align:center;margin-bottom:0.08em;color:#64b5f6;font-weight:400;">Enterprise &amp; PE-Backed Platform Modernization | AI &amp; Data-Driven Transformation</div>
     <div class="links" style="font-size:0.92em; font-weight:400; margin-bottom:0em; text-align:center;">
         <a href="https://www.linkedin.com/in/chris-obermeier/" target="_blank">LinkedIn</a> |
         <a href="https://github.com/obizues" target="_blank">GitHub</a> |
@@ -206,10 +189,8 @@ app_title_banner = """
 """
 st.markdown(app_title_banner, unsafe_allow_html=True)
 
-##Additional spacing after title banner
-st.markdown("<br>", unsafe_allow_html=True)
-
 # --- RBAC: Role selection ---
+
 ROLES = [
     "Alice Johnson (CPO)",
     "David Kim (Engineer)",
@@ -301,7 +282,7 @@ with col2:
     )
     if new_role != current_role:
         st.session_state['user_role'] = new_role
-        st.rerun()
+        st.experimental_rerun()
 
 
 # Map dropdown display names to valid HuggingFace model names
@@ -387,7 +368,7 @@ st.markdown('''
     background: #fff;
     padding: 0 0 2px 0;
 }
-@media (max-width: 1300px) {
+@media (max-width: 900px) {
     .scrollable-chat-window {
         height: 220px;
         min-height: 120px;
@@ -524,9 +505,8 @@ st.markdown('''
 ''', unsafe_allow_html=True)
 
 st.markdown('<div class="input-bar">', unsafe_allow_html=True)
-chat_html = '<div class="scrollable-chat-window">'
-message_sent = False  # Ensure variable is always defined
 with st.form(key='chat_input_form', clear_on_submit=True):
+    # Only one text_input with key 'user_input' in the form
     user_input = st.text_input("Message", "", key="user_input")
     submitted = st.form_submit_button("Send")
     if submitted and user_input.strip():
@@ -539,15 +519,7 @@ with st.form(key='chat_input_form', clear_on_submit=True):
         timestamp = time.strftime('%Y-%m-%d %H:%M:%S')
         from llm_backend.query_router import route_query
         bot_response, provenance = route_query(user_input, user_role, metadata)
-        # Improved denial detection
-        denial_keywords = [
-            'unauthorized', 'denied', 'forbidden', 'not allowed', 'access denied',
-            'you do not have access', "you don't have access", 'permission denied', 'insufficient permissions', 'color:red'
-        ]
-        is_denial = False
-        if isinstance(bot_response, str):
-            bot_response_lc = bot_response.lower()
-            is_denial = any(kw in bot_response_lc for kw in denial_keywords)
+        is_denial = isinstance(bot_response, str) and ('Unauthorized access attempt' in bot_response or 'denied' in bot_response.lower())
         log_entry = {
             'timestamp': timestamp,
             'user': user_role,
@@ -560,63 +532,96 @@ with st.form(key='chat_input_form', clear_on_submit=True):
         st.session_state['query_logs'].append(log_entry)
         append_query_log(log_entry)
         st.session_state.setdefault('history', []).append((user_input, bot_response, response_time, model_used, provenance, model_used, user_role))
-        message_sent = True
-if message_sent:
-    # Use st.rerun() if available, else fallback to st.experimental_rerun()
-    if hasattr(st, "rerun"):
-        st.rerun()
-    elif hasattr(st, "experimental_rerun"):
         st.experimental_rerun()
 
-# Audit log dropdown below message input
-with st.expander('Query Log Viewer', expanded=False):
-    st.markdown('**Audit Trail:** All queries and responses are logged below. Use the filter to show only denial logs.')
-    show_only_denials = st.checkbox('Show only denial logs', value=st.session_state['show_only_denials'], key='show_only_denials')
-    logs_to_display = st.session_state['query_logs']
-    if st.session_state['show_only_denials']:
-        logs_to_display = [log for log in logs_to_display if log.get('denial', False) is True or str(log.get('denial', '')).strip().lower() == 'true']
-    if logs_to_display:
-        import pandas as pd
-        import re
-        # Preprocess: sanitize all values and strip HTML from response
-        def strip_html(text):
-            if not isinstance(text, str):
-                text = str(text) if text is not None else ''
-            # Remove HTML tags
-            return re.sub(r'<[^>]+>', '', text)
-
-        def preprocess_log_entry(entry, max_response_len=300):
-            new_entry = {}
-            for k, v in entry.items():
-                s = str(v) if v is not None else ''
-                # Strip HTML from response field
-                if k == 'response':
-                    s = strip_html(s)
-                    if len(s) > max_response_len:
-                        s = s[:max_response_len] + '... [truncated]'
-                # Further sanitize: remove newlines, tabs, and limit to 500 chars for any field
-                s = s.replace('\n', ' ').replace('\r', ' ').replace('\t', ' ')
-                if len(s) > 500:
-                    s = s[:500] + '... [truncated]'
-                new_entry[k] = s
-            return new_entry
-        # Limit to last 100 entries for compatibility
-        processed_logs = [preprocess_log_entry(log) for log in logs_to_display[-100:]]
-        df = pd.DataFrame(processed_logs)
-        st.table(df)
+# --- Collapsible Log Viewer at Bottom ---
+with st.expander("Query Logs (Audit)", expanded=False):
+    logs = st.session_state.get('query_logs', [])
+    show_denials_only = st.checkbox("Show only denial logs", value=False, key="show_denials_only")
+    # Handle both bool and string 'denial' values, and fallback to response text if needed
+    def is_denial_true(log):
+        val = log.get('denial')
+        # If denial is a bool or string 'true', treat as denial
+        if val is True or (isinstance(val, str) and val.lower() == 'true'):
+            return True
+        # Fallback: check if response contains denial text
+        resp = str(log.get('response', ''))
+        return (
+            'do not have access' in resp.lower() or
+            'unauthorized access attempt' in resp.lower() or
+            'denied' in resp.lower()
+        )
+    if show_denials_only:
+        logs_to_show = [log for log in logs if is_denial_true(log)]
     else:
-        st.info('No logs to display for the selected filter.')
+        logs_to_show = logs
+    if logs_to_show:
+        import pandas as pd
+        logs_df = pd.DataFrame(logs_to_show)
+        if not logs_df.empty:
+            def highlight_denials(row):
+                color = 'background-color: #ffcccc;' if is_denial_true(row) else ''
+                return [color]*len(row)
+            st.dataframe(
+                logs_df.style.apply(highlight_denials, axis=1),
+                height=250
+            )
+        else:
+            st.info("No logs to display.")
+    else:
+        st.info("No logs to display.")
+        # chat_html += f'<div>'
+        # Role-specific icon and label for user chat bubble
+        role_icons = {
+            'HR': '🧑‍💼',
+            'Technology': '🧑‍💻',
+            'David Kim (Engineer)': '🧑‍💻',
+            'CTO': '🧑‍💼',
+        }
+        role_labels = {
+            'HR': 'HR',
+            'Technology': 'Technology',
+            'David Kim (Engineer)': 'David Kim (Engineer)',
+            'CTO': 'CTO',
+        }
+        # Placeholder for user_role_at_time to avoid NameError
+        display_role = 'You'
+        icon = role_icons.get(display_role, '🧑')
+        label = role_labels.get(display_role, display_role)
+        # chat_html += f'<div class="chat-bubble-user">{icon} <b>{label}:</b> {user}</div>'
+        # chat_html += f'<div class="chat-bubble-bot">&#129302; <b>Bot:</b> {bot}'
+        # Show source file for onboarding answers
+        # Only show sources if not None, not empty, and not a denial/warning message
+        sources = None  # Placeholder to avoid NameError
+        if sources and sources not in [None, '', [], 'None']:
+            def file_to_link(file):
+                try:
+                    rel_path = os.path.relpath(str(file), os.path.dirname(__file__))
+                    rel_path_url = rel_path.replace('\\', '/').replace(' ', '%20')
+                    if rel_path_url.startswith(('mock_data/', 'ingestion/', 'vector_db/')):
+                        return f'<a href="/{rel_path_url}" target="_blank">{os.path.basename(str(file))}</a>'
+                    else:
+                        return os.path.basename(str(file))
+                except Exception:
+                    return os.path.basename(str(file))
+            if isinstance(sources, list) and sources:
+                src_links = ', '.join([file_to_link(s) for s in sources])
+                src_html = f'<br><span style="font-size:0.85em;color:#1976d2;">Sources: {src_links}</span>'
+                chat_html += src_html
+            elif isinstance(sources, str) and sources:
+                chat_html += f'<br><span style="font-size:0.85em;color:#1976d2;">Source: {file_to_link(sources)}</span>'
+st.markdown('</div>', unsafe_allow_html=True)
 
 # Always render sidebar (do not gate on ECHO_MODE)
 # Collapsible sidebar sections (default collapsed)
 st.sidebar.markdown("""
 <div style='background:#eaf6ff;border:1.5px solid #b3e5fc;padding:10px 12px 8px 12px;margin-bottom:12px;text-align:center;border-radius:8px;'>
     <span style='font-size:1.08em;font-weight:600;color:#1976d2;'>&#128241; App version:</span><br>
-    <span style='font-size:1.05em;color:#222;'>v2.1.8 - Enterprise RBAC, RAG, Audit Logging, Modern UI</span>
+    <span style='font-size:1.05em;color:#222;'>v2.2.0 - Enterprise RBAC, RAG, Audit Logging, Modern UI</span>
 </div>
 <div class='sidebar-card' style='background:#eaf6ff;font-size:0.93em;margin-bottom:16px;border:1.5px solid #b3e5fc;padding:8px 8px 6px 8px;'>
     <div style='font-weight:700;font-size:1em;line-height:1.2;margin-bottom:2px;text-align:center;'>
-        <span style=\"font-size:1.05em;vertical-align:middle;\">&#129302;</span>  Local AI Governance Platform
+        <span style=\"font-size:1.05em;vertical-align:middle;\">&#129302;</span> AI Search & Knowledge System
     </div>
     <div style='margin:0 0 0 0;font-size:0.91em;line-height:1.35;text-align:center;'>
         <div style='display:flex;align-items:center;justify-content:center;gap:6px;margin-bottom:2px;'>
@@ -674,7 +679,6 @@ Portfolio Project
 - Production-grade deployment and reproducible environments
 - **Persistent query logging and audit trail (CSV-based)**
 - **Collapsible log viewer with denial log filtering and selection**
-- **Denial detection logic for audit logs, with retroactive flagging and red highlighting**
 
 **Target Audience:**
 Technology executives, engineering leaders, HR professionals, AI/ML practitioners, and technical decision-makers interested in secure document Q&A, RBAC enforcement, and advanced LLM-driven systems for enterprise use cases.
@@ -687,28 +691,27 @@ Technology executives, engineering leaders, HR professionals, AI/ML practitioner
 - Clean architecture, modular code, and documentation
 - Technical leadership and system design for enterprise AI
 - **Persistent, filterable audit logs for all queries and denials**
-- **Denial logs visually highlighted in red for clarity**
 """, unsafe_allow_html=True)
-with st.sidebar.expander("📄 Project Documentation", expanded=False):
+with st.sidebar.expander("&#128193; Project Documentation", expanded=False):
     st.markdown("**Project Documentation**")
     st.markdown("[GitHub Repository](https://github.com/obizues/Local-AI-Chatbot-POC)")
     st.markdown("**Documentation**")
     st.markdown("- [README.md](https://github.com/obizues/Local-AI-Chatbot-POC/blob/main/README.md): Project overview, quick start, features")
     st.markdown("- [ARCHITECTURE.md](https://github.com/obizues/Local-AI-Chatbot-POC/blob/main/ARCHITECTURE.md): Deep technical documentation and diagrams")
     st.markdown("- System Diagrams: Mermaid diagrams for flow, components, and RAG")
-    st.markdown("**Key Sections:**\n- RBAC & Audit Logging\n- RAG & Semantic Search\n- LLM integration strategy\n- Production deployment guide\n- Architectural decision records\n- Denial detection and audit log filtering logic\n- Red highlighting for denial logs in audit viewer")
-with st.sidebar.expander("🧰 Tech Stack", expanded=False):
+    st.markdown("**Key Sections:**\n- RBAC & Audit Logging\n- RAG & Semantic Search\n- LLM integration strategy\n- Production deployment guide\n- Architectural decision records")
+with st.sidebar.expander("&#128295; Tech Stack", expanded=False):
     st.markdown("""
 <span style='font-size:1em;'>
 <ul style='margin-bottom:0; padding-left: 18px;'>
 <li>Python 3.10+</li>
-<li>Streamlit (UI, audit log filtering, denial highlighting)</li>
+<li>Streamlit (UI)</li>
 <li>FAISS (vector search)</li>
 <li>sentence-transformers (embeddings)</li>
 <li>HuggingFace Transformers (LLM pipeline)</li>
 <li>Ollama (local LLM, optional)</li>
 <li>Flask (API integration)</li>
-<li>pandas (data handling, audit log styling)</li>
+<li>pandas (data handling)</li>
 <li>NumPy (vector math)</li>
 <li>PyMuPDF (PDF ingestion)</li>
 <li>python-docx (DOCX ingestion)</li>
@@ -733,7 +736,6 @@ with st.sidebar.expander("🧩 System Design Notes", expanded=False):
 <li><b>Observability:</b> Debug logs and error messages are written to local files for troubleshooting and transparency.</li>
 <li><b>Resilience:</b> Graceful error handling ensures the app remains usable even if some components fail or are unavailable.</li>
 <li><b>Infrastructure:</b> Designed for local use, but can be containerized or deployed on private servers as needed.</li>
-<li><b>Audit Log Filtering & Denial Highlighting:</b> Denial detection logic flags and highlights denial events in the audit log viewer for compliance and review.</li>
 </ul>
 </span>
 """, unsafe_allow_html=True)

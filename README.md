@@ -1,6 +1,7 @@
 ## 🖼️ System Diagram
 
-> **Version:** v2.0.4 — March 2, 2026
+> **Version:** v2.0.1 — March 2, 2026
+**Version:** v2.2.0
 ```mermaid
 flowchart TD
    UserInput["User Input (UI)"] --> ChatWindow["Chat Window (Streamlit)"]
@@ -91,13 +92,6 @@ Technology executives, technology leaders, HR professionals, AI/ML practitioners
 - **AI Search & Knowledge System:** RAG pipeline, semantic retrieval, and provenance/source display for all answers.
 - **Brag-worthy:** Modern UI/UX, role-preserved chat, and seamless LLM/model switching. Devcontainer and GitHub Actions for reproducible development.
 - Improvements tracker in sidebar
-
-
-## Version: v2.0.4
-- Denial detection logic improved for audit logs and retroactive flagging
-- Audit log filter now works for all historical and new logs
-- UI and backend logic for audit log filtering and denial flagging
-- Denial logs visually highlighted in red for clarity
 
 
 ## 📦 Project Structure (as of v0.11.0)
