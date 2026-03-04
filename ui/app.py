@@ -577,9 +577,17 @@ with st.expander('Query Log Viewer', expanded=False):
         logs_to_display = [log for log in logs_to_display if log.get('denial', False) is True or str(log.get('denial', '')).strip().lower() == 'true']
     if logs_to_display:
         import pandas as pd
-        df = pd.DataFrame(logs_to_display)
-        # Convert all columns to string to avoid LargeUtf8 type errors in Streamlit
-        df = df.astype(str)
+        # Preprocess: convert all values to strings and truncate long responses
+        def preprocess_log_entry(entry, max_response_len=300):
+            new_entry = {}
+            for k, v in entry.items():
+                s = str(v) if v is not None else ''
+                if k == 'response' and len(s) > max_response_len:
+                    s = s[:max_response_len] + '... [truncated]'
+                new_entry[k] = s
+            return new_entry
+        processed_logs = [preprocess_log_entry(log) for log in logs_to_display]
+        df = pd.DataFrame(processed_logs)
         st.dataframe(df)
     else:
         st.info('No logs to display for the selected filter.')
@@ -589,7 +597,7 @@ with st.expander('Query Log Viewer', expanded=False):
 st.sidebar.markdown("""
 <div style='background:#eaf6ff;border:1.5px solid #b3e5fc;padding:10px 12px 8px 12px;margin-bottom:12px;text-align:center;border-radius:8px;'>
     <span style='font-size:1.08em;font-weight:600;color:#1976d2;'>&#128241; App version:</span><br>
-    <span style='font-size:1.05em;color:#222;'>v2.1.5 - Enterprise RBAC, RAG, Audit Logging, Modern UI</span>
+    <span style='font-size:1.05em;color:#222;'>v2.1.6 - Enterprise RBAC, RAG, Audit Logging, Modern UI</span>
 </div>
 <div class='sidebar-card' style='background:#eaf6ff;font-size:0.93em;margin-bottom:16px;border:1.5px solid #b3e5fc;padding:8px 8px 6px 8px;'>
     <div style='font-weight:700;font-size:1em;line-height:1.2;margin-bottom:2px;text-align:center;'>
