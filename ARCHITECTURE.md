@@ -136,6 +136,12 @@ flowchart TD
 2. Each new query appends a log entry to both session state and the CSV file.
 3. The log viewer displays all logs from session state, with options to filter and highlight denials.
 
+## v2.1.0 Architecture Notes
+- Denial detection and audit log filtering logic is implemented in ui/app.py
+- Retroactive flagging of denials in query_logs.csv
+- UI and backend logic for robust audit log filtering
+- Denial logs visually highlighted in red for clarity
+
 ## Diagrams
 ### Chat UI and Data Flow (Mermaid)
 

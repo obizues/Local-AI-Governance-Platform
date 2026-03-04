@@ -93,6 +93,13 @@ Technology executives, technology leaders, HR professionals, AI/ML practitioners
 - Improvements tracker in sidebar
 
 
+## Version: v2.0.4
+- Denial detection logic improved for audit logs and retroactive flagging
+- Audit log filter now works for all historical and new logs
+- UI and backend logic for audit log filtering and denial flagging
+- Denial logs visually highlighted in red for clarity
+
+
 ## 📦 Project Structure (as of v0.11.0)
 - `ui/app.py` — Main Streamlit app (modern chat UI, RBAC, audit logic)
 - `llm_backend/` — LLM and RAG pipeline code

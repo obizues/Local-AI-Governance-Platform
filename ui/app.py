@@ -36,6 +36,24 @@ def append_query_log(log_entry):
         entry['denial'] = str(entry['denial'])
         writer.writerow(entry)
 
+# --- Retroactively flag denial logs in query_logs.csv ---
+import csv
+csv_path = LOG_CSV_PATH
+if os.path.exists(csv_path):
+    denial_keywords = [
+        'unauthorized', 'denied', 'forbidden', 'not allowed', 'access denied',
+        'you do not have access', "you don't have access", 'permission denied', 'insufficient permissions', 'color:red'
+    ]
+    with open(csv_path, 'r', encoding='utf-8') as f:
+        reader = list(csv.DictReader(f))
+    for log in reader:
+        resp = str(log.get('response', '')).lower()
+        log['denial'] = str(any(kw in resp for kw in denial_keywords))
+    with open(csv_path, 'w', encoding='utf-8', newline='') as f:
+        writer = csv.DictWriter(f, fieldnames=['timestamp', 'user', 'query', 'response', 'denial'])
+        writer.writeheader()
+        writer.writerows(reader)
+
 
 # --- Initialize persistent query logs in session state ---
 if 'query_logs' not in st.session_state:
@@ -216,7 +234,7 @@ with col2:
     )
     if new_role != current_role:
         st.session_state['user_role'] = new_role
-        st.experimental_rerun()
+        st.rerun()
 
 
 # Map dropdown display names to valid HuggingFace model names
@@ -440,6 +458,7 @@ st.markdown('''
 
 st.markdown('<div class="input-bar">', unsafe_allow_html=True)
 chat_html = '<div class="scrollable-chat-window">'
+message_sent = False  # Ensure variable is always defined
 with st.form(key='chat_input_form', clear_on_submit=True):
     user_input = st.text_input("Message", "", key="user_input")
     submitted = st.form_submit_button("Send")
@@ -453,7 +472,15 @@ with st.form(key='chat_input_form', clear_on_submit=True):
         timestamp = time.strftime('%Y-%m-%d %H:%M:%S')
         from llm_backend.query_router import route_query
         bot_response, provenance = route_query(user_input, user_role, metadata)
-        is_denial = isinstance(bot_response, str) and ('Unauthorized access attempt' in bot_response or 'denied' in bot_response.lower())
+        # Improved denial detection
+        denial_keywords = [
+            'unauthorized', 'denied', 'forbidden', 'not allowed', 'access denied',
+            'you do not have access', "you don't have access", 'permission denied', 'insufficient permissions', 'color:red'
+        ]
+        is_denial = False
+        if isinstance(bot_response, str):
+            bot_response_lc = bot_response.lower()
+            is_denial = any(kw in bot_response_lc for kw in denial_keywords)
         log_entry = {
             'timestamp': timestamp,
             'user': user_role,
@@ -466,6 +493,9 @@ with st.form(key='chat_input_form', clear_on_submit=True):
         st.session_state['query_logs'].append(log_entry)
         append_query_log(log_entry)
         st.session_state.setdefault('history', []).append((user_input, bot_response, response_time, model_used, provenance, model_used, user_role))
+        message_sent = True
+if message_sent:
+    st.rerun()
 
 # Audit log dropdown below message input
 with st.expander('Query Log Viewer', expanded=False):
@@ -473,9 +503,14 @@ with st.expander('Query Log Viewer', expanded=False):
     show_only_denials = st.checkbox('Show only denial logs', value=st.session_state['show_only_denials'], key='show_only_denials')
     logs_to_display = st.session_state['query_logs']
     if st.session_state['show_only_denials']:
-        logs_to_display = [log for log in logs_to_display if str(log.get('denial', '')) == 'True']
+        logs_to_display = [log for log in logs_to_display if log.get('denial', False) is True or str(log.get('denial', '')).strip().lower() == 'true']
     if logs_to_display:
-        st.dataframe(pd.DataFrame(logs_to_display))
+        import pandas as pd
+        df = pd.DataFrame(logs_to_display)
+        def highlight_denials(row):
+            color = 'background-color: #ffcccc; color: #b71c1c;' if str(row['denial']).lower() == 'true' else ''
+            return [color] * len(row)
+        st.dataframe(df.style.apply(highlight_denials, axis=1))
     else:
         st.info('No logs to display for the selected filter.')
 
@@ -484,11 +519,11 @@ with st.expander('Query Log Viewer', expanded=False):
 st.sidebar.markdown("""
 <div style='background:#eaf6ff;border:1.5px solid #b3e5fc;padding:10px 12px 8px 12px;margin-bottom:12px;text-align:center;border-radius:8px;'>
     <span style='font-size:1.08em;font-weight:600;color:#1976d2;'>&#128241; App version:</span><br>
-    <span style='font-size:1.05em;color:#222;'>v2.0.4 - Enterprise RBAC, RAG, Audit Logging, Modern UI</span>
+    <span style='font-size:1.05em;color:#222;'>v2.1.0 - Enterprise RBAC, RAG, Audit Logging, Modern UI</span>
 </div>
 <div class='sidebar-card' style='background:#eaf6ff;font-size:0.93em;margin-bottom:16px;border:1.5px solid #b3e5fc;padding:8px 8px 6px 8px;'>
     <div style='font-weight:700;font-size:1em;line-height:1.2;margin-bottom:2px;text-align:center;'>
-        <span style=\"font-size:1.05em;vertical-align:middle;\">&#129302;</span> AI Search & Knowledge System
+        <span style=\"font-size:1.05em;vertical-align:middle;\">&#129302;</span>  Local AI Governance Platform
     </div>
     <div style='margin:0 0 0 0;font-size:0.91em;line-height:1.35;text-align:center;'>
         <div style='display:flex;align-items:center;justify-content:center;gap:6px;margin-bottom:2px;'>
@@ -546,6 +581,7 @@ Portfolio Project
 - Production-grade deployment and reproducible environments
 - **Persistent query logging and audit trail (CSV-based)**
 - **Collapsible log viewer with denial log filtering and selection**
+- **Denial detection logic for audit logs, with retroactive flagging and red highlighting**
 
 **Target Audience:**
 Technology executives, engineering leaders, HR professionals, AI/ML practitioners, and technical decision-makers interested in secure document Q&A, RBAC enforcement, and advanced LLM-driven systems for enterprise use cases.
@@ -558,6 +594,7 @@ Technology executives, engineering leaders, HR professionals, AI/ML practitioner
 - Clean architecture, modular code, and documentation
 - Technical leadership and system design for enterprise AI
 - **Persistent, filterable audit logs for all queries and denials**
+- **Denial logs visually highlighted in red for clarity**
 """, unsafe_allow_html=True)
 with st.sidebar.expander("📄 Project Documentation", expanded=False):
     st.markdown("**Project Documentation**")
@@ -566,19 +603,19 @@ with st.sidebar.expander("📄 Project Documentation", expanded=False):
     st.markdown("- [README.md](https://github.com/obizues/Local-AI-Chatbot-POC/blob/main/README.md): Project overview, quick start, features")
     st.markdown("- [ARCHITECTURE.md](https://github.com/obizues/Local-AI-Chatbot-POC/blob/main/ARCHITECTURE.md): Deep technical documentation and diagrams")
     st.markdown("- System Diagrams: Mermaid diagrams for flow, components, and RAG")
-    st.markdown("**Key Sections:**\n- RBAC & Audit Logging\n- RAG & Semantic Search\n- LLM integration strategy\n- Production deployment guide\n- Architectural decision records")
+    st.markdown("**Key Sections:**\n- RBAC & Audit Logging\n- RAG & Semantic Search\n- LLM integration strategy\n- Production deployment guide\n- Architectural decision records\n- Denial detection and audit log filtering logic\n- Red highlighting for denial logs in audit viewer")
 with st.sidebar.expander("🧰 Tech Stack", expanded=False):
     st.markdown("""
 <span style='font-size:1em;'>
 <ul style='margin-bottom:0; padding-left: 18px;'>
 <li>Python 3.10+</li>
-<li>Streamlit (UI)</li>
+<li>Streamlit (UI, audit log filtering, denial highlighting)</li>
 <li>FAISS (vector search)</li>
 <li>sentence-transformers (embeddings)</li>
 <li>HuggingFace Transformers (LLM pipeline)</li>
 <li>Ollama (local LLM, optional)</li>
 <li>Flask (API integration)</li>
-<li>pandas (data handling)</li>
+<li>pandas (data handling, audit log styling)</li>
 <li>NumPy (vector math)</li>
 <li>PyMuPDF (PDF ingestion)</li>
 <li>python-docx (DOCX ingestion)</li>
@@ -603,6 +640,7 @@ with st.sidebar.expander("🧩 System Design Notes", expanded=False):
 <li><b>Observability:</b> Debug logs and error messages are written to local files for troubleshooting and transparency.</li>
 <li><b>Resilience:</b> Graceful error handling ensures the app remains usable even if some components fail or are unavailable.</li>
 <li><b>Infrastructure:</b> Designed for local use, but can be containerized or deployed on private servers as needed.</li>
+<li><b>Audit Log Filtering & Denial Highlighting:</b> Denial detection logic flags and highlights denial events in the audit log viewer for compliance and review.</li>
 </ul>
 </span>
 """, unsafe_allow_html=True)

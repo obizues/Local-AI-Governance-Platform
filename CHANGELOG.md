@@ -1,4 +1,10 @@
-# [v2.1.0] - 2026-03-02
+# [v2.1.0] - 2026-03-04
+### Changed
+- Denial detection logic improved for audit logs and retroactive flagging
+- Audit log filter now works for all historical and new logs
+- UI and backend logic for audit log filtering and denial flagging
+- Denial logs visually highlighted in red for clarity
+
 ### Added
 - Persistent query logging and audit trail (CSV-based)
 - Collapsible log viewer in UI with denial log filtering and selection
@@ -8,10 +14,15 @@
 
 
 
-# [v2.0.4] - 2026-03-03
+# [v2.0.4] - 2026-03-04
 ### Added
 - Restored audit log dropdown below message input
 - Denial log filtering and log display
+
+### Changed
+- Denial detection logic improved for audit logs and retroactive flagging
+- Audit log filter now works for all historical and new logs
+- UI and backend logic for audit log filtering and denial flagging
 
 ### Fixed
 - Removed duplicate chatbox
