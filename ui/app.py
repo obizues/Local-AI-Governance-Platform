@@ -125,7 +125,7 @@ st.markdown(
             border-radius: 0 0 18px 18px;
             box-shadow: 0 2px 8px rgba(25, 118, 210, 0.10);
             letter-spacing: 0.01em;
-            max-width: 700px;
+            max-width: 1100px;
         }
         .main-title-banner .emoji {
             font-size: 1.3em;
@@ -141,8 +141,75 @@ st.markdown(
     , unsafe_allow_html=True
 )
 
-# --- RBAC: Role selection ---
+app_title_banner = """
+<style>
+.app-title-banner {
+    background: #f5f5f5;
+    color: #222;
+    font-family: 'Segoe UI', 'Arial', sans-serif;
+    font-size: 1.08em;
+    font-weight: 500;
+    text-align: center;
+    margin: 0.5em auto 0 auto;
+    padding: 0.5em 0 0.5em 0;
+    box-sizing: border-box;
+    border-radius: 0 0 12px 12px;
+    box-shadow: 0 2px 8px rgba(25, 118, 210, 0.08);
+    max-width: 1100px;
+}
+.app-title-banner .name-title {
+    font-size: 1.18em;
+    font-weight: 700;
+    color: #1976d2;
+    margin-bottom: 0.1em;
+}
+.app-title-banner .subtitle {
+    font-size: 0.98em;
+    color: #1976d2;
+    margin-bottom: 0.2em;
+}
+.app-title-banner .links, .app-title-banner .project-links {
+    font-size: 0.97em;
+    margin-bottom: 0.1em;
+}
+.app-title-banner a {
+    color: #1976d2;
+    text-decoration: underline;
+    margin: 0 8px;
+    font-size: 0.97em;
+}
+.app-title-banner .project-links {
+    margin-top: 0.1em;
+}
+    @media (max-width: 1100px) {
+        .app-title-banner { font-size: 0.93em; }
+        .app-title-banner .name-title { font-size: 1em; }
+        .app-title-banner .subtitle { font-size: 0.91em; }
+        .app-title-banner .links, .app-title-banner .project-links { font-size: 0.91em; }
+    }
+</style>
 
+<div class="app-title-banner">
+    <div class="name-title" style="font-size:0.95em; font-weight:400; margin-bottom:0.08em; text-align:center; color:#1976d2;"><b>Chris Obermeier</b> | SVP of Engineering</div>
+    <div class="subtitle" style="background:transparent;border-radius:0;padding:2px 8px;font-size:0.83em;text-align:center;margin-bottom:0.08em;color:#64b5f6;font-weight:400;">Enterprise Platform & AI Transformation | Led 100+ Engineer Orgs | PE & Revenue-Scale Modernization</div>
+    <div class="links" style="font-size:0.92em; font-weight:400; margin-bottom:0em; text-align:center;">
+        <a href="https://www.linkedin.com/in/chris-obermeier/" target="_blank">LinkedIn</a> |
+        <a href="https://github.com/obizues" target="_blank">GitHub</a> |
+        <a href="mailto:chris.obermeier@gmail.com" target="_blank">Email</a>
+    </div>
+    <div class="project-links" style="font-size:0.92em; font-weight:400; margin-top:0em; text-align:center;">
+        <span style="margin-right:4px;">&#11088;</span><a href="https://github.com/obizues/Local-AI-Chatbot-POC" target="_blank">Star on GitHub</a> |
+        <span style="margin-right:4px;">&#128214;</span><a href="https://github.com/obizues/Local-AI-Chatbot-POC/blob/main/README.md" target="_blank">Read Documentation</a> |
+        <span style="margin-right:4px;">&#127891;</span><a href="https://github.com/obizues/Local-AI-Chatbot-POC/blob/main/ARCHITECTURE.md" target="_blank">View Architecture</a>
+    </div>
+</div>
+"""
+st.markdown(app_title_banner, unsafe_allow_html=True)
+
+##Additional spacing after title banner
+st.markdown("<br>", unsafe_allow_html=True)
+
+# --- RBAC: Role selection ---
 ROLES = [
     "Alice Johnson (CPO)",
     "David Kim (Engineer)",
@@ -320,7 +387,7 @@ st.markdown('''
     background: #fff;
     padding: 0 0 2px 0;
 }
-@media (max-width: 900px) {
+@media (max-width: 1300px) {
     .scrollable-chat-window {
         height: 220px;
         min-height: 120px;
@@ -519,7 +586,7 @@ with st.expander('Query Log Viewer', expanded=False):
 st.sidebar.markdown("""
 <div style='background:#eaf6ff;border:1.5px solid #b3e5fc;padding:10px 12px 8px 12px;margin-bottom:12px;text-align:center;border-radius:8px;'>
     <span style='font-size:1.08em;font-weight:600;color:#1976d2;'>&#128241; App version:</span><br>
-    <span style='font-size:1.05em;color:#222;'>v2.1.0 - Enterprise RBAC, RAG, Audit Logging, Modern UI</span>
+    <span style='font-size:1.05em;color:#222;'>v2.1.1 - Enterprise RBAC, RAG, Audit Logging, Modern UI</span>
 </div>
 <div class='sidebar-card' style='background:#eaf6ff;font-size:0.93em;margin-bottom:16px;border:1.5px solid #b3e5fc;padding:8px 8px 6px 8px;'>
     <div style='font-weight:700;font-size:1em;line-height:1.2;margin-bottom:2px;text-align:center;'>
