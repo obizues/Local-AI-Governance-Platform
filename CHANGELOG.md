@@ -1,6 +1,3 @@
-# [v2.2.0] - 2026-03-04
-### Changed
-- Stable universal audit log table (st.table, last 100 entries, HTML stripped, all values sanitized)
 # [v2.1.0] - 2026-03-02
 ### Added
 - Persistent query logging and audit trail (CSV-based)

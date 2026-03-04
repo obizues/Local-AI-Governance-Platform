@@ -1,7 +1,6 @@
 ## 🖼️ System Diagram
 
 > **Version:** v2.0.1 — March 2, 2026
-**Version:** v2.2.0
 ```mermaid
 flowchart TD
    UserInput["User Input (UI)"] --> ChatWindow["Chat Window (Streamlit)"]

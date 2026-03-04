@@ -557,17 +557,33 @@ with st.expander("Query Logs (Audit)", expanded=False):
         logs_to_show = logs
     if logs_to_show:
         import pandas as pd
-        logs_df = pd.DataFrame(logs_to_show)
-        if not logs_df.empty:
-            def highlight_denials(row):
-                color = 'background-color: #ffcccc;' if is_denial_true(row) else ''
-                return [color]*len(row)
-            st.dataframe(
-                logs_df.style.apply(highlight_denials, axis=1),
-                height=250
-            )
-        else:
-            st.info("No logs to display.")
+        from st_aggrid import AgGrid, GridOptionsBuilder
+        import pandas as pd
+        import re
+        def strip_html(text):
+            if not isinstance(text, str):
+                text = str(text) if text is not None else ''
+            return re.sub(r'<[^>]+>', '', text)
+        def preprocess_log_entry(entry, max_response_len=300):
+            new_entry = {}
+            for k, v in entry.items():
+                s = str(v) if v is not None else ''
+                if k == 'response':
+                    s = strip_html(s)
+                    if len(s) > max_response_len:
+                        s = s[:max_response_len] + '... [truncated]'
+                s = s.replace('\n', ' ').replace('\r', ' ').replace('\t', ' ')
+                if len(s) > 500:
+                    s = s[:500] + '... [truncated]'
+                new_entry[k] = s
+            return new_entry
+        processed_logs = [preprocess_log_entry(log) for log in logs_to_show[-100:]]
+        df = pd.DataFrame(processed_logs)
+        gb = GridOptionsBuilder.from_dataframe(df)
+        gb.configure_pagination(paginationAutoPageSize=True)
+        gb.configure_default_column(resizable=True, filter=True, sortable=True)
+        gridOptions = gb.build()
+        AgGrid(df, gridOptions=gridOptions, height=400, theme="streamlit")
     else:
         st.info("No logs to display.")
         # chat_html += f'<div>'
@@ -617,7 +633,7 @@ st.markdown('</div>', unsafe_allow_html=True)
 st.sidebar.markdown("""
 <div style='background:#eaf6ff;border:1.5px solid #b3e5fc;padding:10px 12px 8px 12px;margin-bottom:12px;text-align:center;border-radius:8px;'>
     <span style='font-size:1.08em;font-weight:600;color:#1976d2;'>&#128241; App version:</span><br>
-    <span style='font-size:1.05em;color:#222;'>v2.2.0 - Enterprise RBAC, RAG, Audit Logging, Modern UI</span>
+    <span style='font-size:1.05em;color:#222;'>v2.2.1 - Enterprise RBAC, RAG, Audit Logging, Modern UI</span>
 </div>
 <div class='sidebar-card' style='background:#eaf6ff;font-size:0.93em;margin-bottom:16px;border:1.5px solid #b3e5fc;padding:8px 8px 6px 8px;'>
     <div style='font-weight:700;font-size:1em;line-height:1.2;margin-bottom:2px;text-align:center;'>
